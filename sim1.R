@@ -29,7 +29,7 @@ for (i in 1:S) {
   Ther = rbinom(N, size = 1, prob = 0.5)  
   
   CR = rnorm(N, mean = b0 + b1*Age + b2*Sex + (b3 + RTher[i, 1])*Ther, sd = 5)
-  SR = rnorm(N, mean = b0 + b1*Age + b2*Sex + (b3 + RTher[i, 2])*Ther, sd = 5)
+  SR = rnorm(N, mean = b0 + b1*Age + b2*Sex + (b3 + RTher[i, 2])*Ther, sd = 9)
   
   dat[[i]] = data.frame(
     Study = i,
