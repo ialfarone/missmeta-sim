@@ -87,6 +87,8 @@ Sigma = cbind(dat$SECR^2, cor2cov(dat$SECR, dat$SESR, dat$Cor.ws), dat$SESR^2)
 mv.c <- mixmeta(theta, Sigma, method="reml")
 summary(mv.c)
 
+# Generate missing ####
+
 ## Missing Completely At Random ####
 
 mrate = 0.2
@@ -94,20 +96,79 @@ size = S*mrate
 M_cr = sample(S, size=size, replace=T)
 M_sr = ifelse(S != M_cr, sample(S, size=size, replace=T))
 
-
 library(dplyr)
 dmcar <- dat %>%
   mutate(
     EstCR = ifelse(Study %in% M_cr, NA, EstCR),
-#    SECR = ifelse(Study %in% M_cr, NA, SECR),
+    SECR = ifelse(Study %in% M_cr, NA, SECR),
     EstSR = ifelse(Study %in% M_sr, NA, EstSR),
-#    SESR = ifelse(Study %in% M_sr, NA, SESR),
-#    Cor.ws = ifelse(Study %in% M_cr | Study %in% M_sr, NA, Cor.ws)
+    SESR = ifelse(Study %in% M_sr, NA, SESR),
+    Cor.ws = ifelse(Study %in% M_cr | Study %in% M_sr, NA, Cor.ws)
   )
 
 dmcar
 
-### Uniform distribution ####
+
+## Missing At Random ####
+
+sub <- d %>%
+  group_by(Study) %>%
+  summarise(meanA = mean(Age))
+
+beta0 = 10     
+beta1 = -0.15  # higher age -> lower prob of CR being observed
+
+sub$likObs = 1 / (1 + exp(-(beta0 + beta1 * sub$meanA)))
+
+M0 <- rbinom(100, size = 1, prob = sub$likObs)
+dmar = dat
+
+for (i in 1:S) {
+  if (M0[i] == 0) {
+    dmar$EstCR[dat$Study == i] <- NA
+  }
+}
+head(dmar)
+
+library(ggplot2)
+
+ggplot(dmar, aes(x = sub$meanA, fill = is.na(EstCR))) +
+  geom_histogram(binwidth = 2, position = "stack") +
+  labs(title = "Missingness in CR as a function of Age", x = "Age", y = "Count") +
+  scale_fill_manual(values = c("#5B5F97", "#EE6C4D"), name = "CR Missing") +
+  theme_minimal()
+
+
+## Missing Not At Random (focused) ####
+
+beta0 = 0     
+beta1 = 0.30  # lower EstCR -> lower prob of CR being observed
+
+dmnar = dat
+
+likObs = 1 / (1 + exp(-(beta0 + beta1 * dmnar$EstCR)))
+
+M0 <- rbinom(100, size = 1, prob = likObs)
+
+for (i in 1:S) {
+  if (M0[i] == 0) {
+    dmnar$EstCR[dat$Study == i] <- NA
+  }
+}
+head(dmnar)
+sum(is.na(dmnar$EstCR))
+
+library(ggplot2)
+
+ggplot(dmnar, aes(x = dat$EstCR, fill = is.na(EstCR))) +
+  geom_histogram(binwidth = 2, position = "stack") +
+  labs(title = "Missingness in CR as a function of CR", x = "EstCR", y = "Count") +
+  scale_fill_manual(values = c("#5B5F97", "#EE6C4D"), name = "CR Missing") +
+  theme_minimal()
+
+# Random sample generator for continuous missing data ####
+
+## Uniform distribution ####
 
 results <- list()
 iter <- 10
@@ -136,61 +197,4 @@ for (i in 1:iter) {
 }
 
 do.call(rbind, results)
-
-## Missing At Random ####
-
-sub <- d %>%
-  group_by(Study) %>%
-  summarise(meanA = mean(Age))
-
-beta0 = 10     
-beta1 = -0.15  # higher age -> lower prob of CR being observed
-
-sub$likObs = 1 / (1 + exp(-(beta0 + beta1 * sub$meanA)))
-
-M0 <- rbinom(100, size = 1, prob = sub$likObs)
-dmar = dat
-
-for (i in 1:S) {
-  if (M0[i] == 0) {
-    dmar$EstCR[dat$Study == i] <- NA
-  }
-}
-head(dmar)
-
-library(ggplot2)
-
-ggplot(dmar, aes(x = sub$meanA, fill = is.na(EstCR))) +
-  geom_histogram(binwidth = 2, position = "stack") +
-  labs(title = "Missingness in CR as a function of Age", x = "Age", y = "Count") +
-  scale_fill_manual(values = c("#98C1D9", "#EE6C4D"), name = "CR Missing") +
-  theme_minimal()
-
-
-## Missing Not At Random (focused) ####
-
-beta0 = 0     
-beta1 = 0.30  # lower EstCR -> lower prob of CR being observed
-
-dmnar = dat
-
-likObs = 1 / (1 + exp(-(beta0 + beta1 * dmnar$EstCR)))
-
-M0 <- rbinom(100, size = 1, prob = likObs)
-
-for (i in 1:S) {
-  if (M0[i] == 0) {
-    dmnar$EstCR[dat$Study == i] <- NA
-  }
-}
-head(dmnar)
-sum(is.na(dmnar$EstCR))
-
-library(ggplot2)
-
-ggplot(dmnar, aes(x = dat$EstCR, fill = is.na(EstCR))) +
-  geom_histogram(binwidth = 2, position = "stack") +
-  labs(title = "Missingness in CR as a function of CR", x = "EstCR", y = "Count") +
-  scale_fill_manual(values = c("#98C1D9", "#EE6C4D"), name = "CR Missing") +
-  theme_minimal()
 
