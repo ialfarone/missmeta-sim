@@ -1,18 +1,18 @@
 library(mvtnorm)
 library(mixmeta)
 
-S = 500
+S = 10
 N = 1000  
 
 Mu = c(0, 0)
-Tau = c(1, 2)
+Tau = c(1, 1)
 rho = 0.7
 Sigma = diag(Tau) %*% matrix(c(1, rho, rho, 1), nrow = 2) %*% diag(Tau)
 RTher = rmvnorm(S, Mu, Sigma)
 
-b0 = 20
-b1 = 0.5
-b2 = 1.5
+b0 = rnorm(S, mean = 20, sd = 2)
+b1 = rnorm(S, mean = 0.5, sd = 0.2)
+b2 = rnorm(S, mean = 1.5, sd = 0.3)
 b3 = 3
 
 
@@ -72,11 +72,13 @@ for (s in 1:S) {
   data$cor[s] <- sum$residCor["CR", "SR"]
 }
 
-dat = as.data.frame(cbind(N, data$CR_Therapy, data$SR_Therapy, 
+dat = as.data.frame(cbind(1:S, N, data$CR_Therapy, data$SR_Therapy, 
                           data$theta_1, data$theta_2, data$cor))
 
-colnames(dat) <- c("N", "EstCR", "EstSR", "SECR", "SESR", "Cor.ws")
+colnames(dat) <- c("Study", "N", "EstCR", "EstSR", "SECR", "SESR", "Cor.ws")
 head(dat)
+
+## Multivariate meta-analysis ####
 
 theta <- cbind(dat$EstCR, dat$EstSR)
 cor2cov = function(sd1, sd2, rho) {sd1 * sd2 * rho}
@@ -84,3 +86,24 @@ Sigma = cbind(dat$SECR^2, cor2cov(dat$SECR, dat$SESR, dat$Cor.ws), dat$SESR^2)
 
 mv.c <- mixmeta(theta, Sigma, method="reml")
 summary(mv.c)
+
+## Missing Completely At Random ####
+
+mrate = 0.1
+size = S*mrate
+M_cr = sample(S, size=size, replace=T)
+M_sr = ifelse(S != M_cr, sample(S, size=size, replace=T))
+
+library(dplyr)
+dmcar <- dat %>%
+  mutate(
+    EstCR = ifelse(Study %in% M_cr, NA, EstCR),
+    SECR = ifelse(Study %in% M_cr, NA, SECR),
+    EstSR = ifelse(Study %in% M_sr, NA, EstSR),
+    SESR = ifelse(Study %in% M_sr, NA, SESR),
+    Cor.ws = ifelse(Study %in% M_cr | Study %in% M_sr, NA, Cor.ws)
+  )
+
+dmcar
+
+
