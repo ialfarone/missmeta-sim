@@ -106,4 +106,28 @@ dmcar <- dat %>%
 
 dmcar
 
+### Uniform distribution ####
+
+results <- list()
+iter <- 100
+
+for (i in 1:iter) {
+  
+  unif_cr <- runif(sum(is.na(dmcar$EstCR)), min = -10, max = 10)
+  unif_sr <- runif(sum(is.na(dmcar$EstSR)), min = -10, max = 10)
+  
+  dmcar$EstCR[is.na(dmcar$EstCR)] <- unif_cr
+  dmcar$EstSR[is.na(dmcar$EstSR)] <- unif_sr
+  
+  theta <- cbind(dmcar$EstCR, dmcar$EstSR)
+  
+  Sigma <- lapply(1:nrow(dmcar), function(j) {
+    cor2cov(c(dmcar$SECR[j], dmcar$SESR[j]), dmcar$Cor.ws[j])
+  })
+  
+  mv.c <- mixmeta(theta, Sigma, method = "reml")
+  
+  results[[i]] <- mv.c$coefficients
+}
+
 
