@@ -1,7 +1,7 @@
 library(mvtnorm)
 library(mixmeta)
 
-S = 10
+S = 100
 N = 1000  
 
 Mu = c(0, 0)
@@ -89,19 +89,20 @@ summary(mv.c)
 
 ## Missing Completely At Random ####
 
-mrate = 0.1
+mrate = 0.2
 size = S*mrate
 M_cr = sample(S, size=size, replace=T)
 M_sr = ifelse(S != M_cr, sample(S, size=size, replace=T))
+
 
 library(dplyr)
 dmcar <- dat %>%
   mutate(
     EstCR = ifelse(Study %in% M_cr, NA, EstCR),
-    SECR = ifelse(Study %in% M_cr, NA, SECR),
+#    SECR = ifelse(Study %in% M_cr, NA, SECR),
     EstSR = ifelse(Study %in% M_sr, NA, EstSR),
-    SESR = ifelse(Study %in% M_sr, NA, SESR),
-    Cor.ws = ifelse(Study %in% M_cr | Study %in% M_sr, NA, Cor.ws)
+#    SESR = ifelse(Study %in% M_sr, NA, SESR),
+#    Cor.ws = ifelse(Study %in% M_cr | Study %in% M_sr, NA, Cor.ws)
   )
 
 dmcar
@@ -109,25 +110,29 @@ dmcar
 ### Uniform distribution ####
 
 results <- list()
-iter <- 100
+iter <- 10
+
+dmcar_orig <- dmcar 
 
 for (i in 1:iter) {
+
+  dmcar = dmcar_orig
   
-  unif_cr <- runif(sum(is.na(dmcar$EstCR)), min = -10, max = 10)
-  unif_sr <- runif(sum(is.na(dmcar$EstSR)), min = -10, max = 10)
+  unif_cr = runif(sum(is.na(dmcar$EstCR)), min = -max(d$CR), max = max(d$CR))
+  unif_sr = runif(sum(is.na(dmcar$EstSR)), min = -max(d$SR), max = max(d$SR))
   
-  dmcar$EstCR[is.na(dmcar$EstCR)] <- unif_cr
-  dmcar$EstSR[is.na(dmcar$EstSR)] <- unif_sr
+  dmcar$EstCR[is.na(dmcar$EstCR)] = unif_cr
+  dmcar$EstSR[is.na(dmcar$EstSR)] = unif_sr
   
-  theta <- cbind(dmcar$EstCR, dmcar$EstSR)
+  theta = cbind(dmcar$EstCR, dmcar$EstSR)
   
-  Sigma <- lapply(1:nrow(dmcar), function(j) {
-    cor2cov(c(dmcar$SECR[j], dmcar$SESR[j]), dmcar$Cor.ws[j])
-  })
+  Sigma = cbind(dmcar$SECR^2, cor2cov(dmcar$SECR, dmcar$SESR, dmcar$Cor.ws), 
+                 dmcar$SESR^2)
+
   
-  mv.c <- mixmeta(theta, Sigma, method = "reml")
+  mv.c = mixmeta(theta, Sigma, method = "reml")
   
-  results[[i]] <- mv.c$coefficients
+  results[[i]] = mv.c$coefficients
 }
 
-
+do.call(rbind, results)
