@@ -136,3 +136,61 @@ for (i in 1:iter) {
 }
 
 do.call(rbind, results)
+
+## Missing At Random ####
+
+sub <- d %>%
+  group_by(Study) %>%
+  summarise(meanA = mean(Age))
+
+beta0 = 10     
+beta1 = -0.15  # higher age -> lower prob of CR being observed
+
+sub$likObs = 1 / (1 + exp(-(beta0 + beta1 * sub$meanA)))
+
+M0 <- rbinom(100, size = 1, prob = sub$likObs)
+dmar = dat
+
+for (i in 1:S) {
+  if (M0[i] == 0) {
+    dmar$EstCR[dat$Study == i] <- NA
+  }
+}
+head(dmar)
+
+library(ggplot2)
+
+ggplot(dmar, aes(x = sub$meanA, fill = is.na(EstCR))) +
+  geom_histogram(binwidth = 2, position = "stack") +
+  labs(title = "Missingness in CR as a function of Age", x = "Age", y = "Count") +
+  scale_fill_manual(values = c("#98C1D9", "#EE6C4D"), name = "CR Missing") +
+  theme_minimal()
+
+
+## Missing Not At Random (focused) ####
+
+beta0 = 0     
+beta1 = 0.30  # lower EstCR -> lower prob of CR being observed
+
+dmnar = dat
+
+likObs = 1 / (1 + exp(-(beta0 + beta1 * dmnar$EstCR)))
+
+M0 <- rbinom(100, size = 1, prob = likObs)
+
+for (i in 1:S) {
+  if (M0[i] == 0) {
+    dmnar$EstCR[dat$Study == i] <- NA
+  }
+}
+head(dmnar)
+sum(is.na(dmnar$EstCR))
+
+library(ggplot2)
+
+ggplot(dmnar, aes(x = dat$EstCR, fill = is.na(EstCR))) +
+  geom_histogram(binwidth = 2, position = "stack") +
+  labs(title = "Missingness in CR as a function of CR", x = "EstCR", y = "Count") +
+  scale_fill_manual(values = c("#98C1D9", "#EE6C4D"), name = "CR Missing") +
+  theme_minimal()
+
