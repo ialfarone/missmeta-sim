@@ -15,8 +15,7 @@ b1 = rnorm(S, mean = 0.5, sd = 0.2)
 b2 = rnorm(S, mean = 1.5, sd = 0.3)
 b3 = 3
 
-
-dat = list()
+dat = vector(mode = "list", length = S)
 
 for (i in 1:S) {
   
@@ -124,10 +123,17 @@ sub <- d %>%
   group_by(Study) %>%
   summarise(meanA = mean(Age))
 
-beta0 = 10     
-beta1 = -0.15  # higher age -> lower prob of CR being observed
 
-sub$likObs = 1 / (1 + exp(-(beta0 + beta1 * sub$meanA)))
+
+beta0 = qlogis(0.10)   
+beta1 = 0.15  # higher age -> lower prob of CR being observed
+
+# plot(sub$meanA, plogis(beta0 + beta1 * (sub$meanA - 18)))
+
+# sub$likObs = 1 / (1 + exp(-(beta0 + beta1 * sub$meanA)))
+
+# centering on the minimum thus 18 is 0
+sub$likObs <- plogis(beta0 + beta1 * (sub$meanA - 18))
 
 M0 <- rbinom(S, size = 1, prob = sub$likObs)
 dmar = dat
@@ -175,8 +181,8 @@ ggplot(dmnar, aes(x = dat$EstCR, fill = is.na(EstCR))) +
 
 ## Uniform distribution ####
 
-results = list()
-iter = 100
+iter = 10
+results = vector(mode = "list", length = iter)
 
 dmcar_orig = dmcar 
 
@@ -189,7 +195,13 @@ for (i in 1:iter) {
   dmcar$EstCR[is.na(dmcar$EstCR)] = unif_cr
   dmcar$EstSR[is.na(dmcar$EstSR)] = unif_sr
   
+  # check this
+  dmcar$SECR[is.na(dmcar$SECR)] = 10^4
+  dmcar$SESR[is.na(dmcar$SESR)] = 10^4
+  dmcar$Cor.ws[is.na(dmcar$Cor.ws)] = 0.7
+  
   theta = cbind(dmcar$EstCR, dmcar$EstSR)
+  
   Sigma = cbind(dmcar$SECR^2, cor2cov(dmcar$SECR, dmcar$SESR, dmcar$Cor.ws), 
                  dmcar$SESR^2)
 
@@ -199,5 +211,6 @@ for (i in 1:iter) {
 }
 
 res = do.call(rbind, results)
+
 hist(res[, 'y1'])
 hist(res[, 'y2'])
