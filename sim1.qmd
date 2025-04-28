@@ -1,6 +1,10 @@
 ---
 title: "sim1"
-format: html
+date: 'today'
+format:
+  html:
+    code-fold: true
+    code-tools: true
 editor: visual
 ---
 
