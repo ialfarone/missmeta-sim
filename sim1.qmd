@@ -130,6 +130,14 @@ dmcar <- dat %>%
     Cor.ws = ifelse(Study %in% M_cr | Study %in% M_sr, NA, Cor.ws)
   )
 
+library(ggplot2)
+
+ggplot(dmcar, aes(x = dat$EstCR, fill = is.na(EstCR))) +
+  geom_histogram(binwidth = 2, position = "stack") +
+  labs(title = "Missingness in CR", x = "EstCR", y = "Count") +
+  scale_fill_manual(values = c("#5B5F97", "#EE6C4D"), name = "CR Missing") +
+  theme_minimal()
+
 head(dmcar)
 sum(is.na(dmcar$EstCR))
 sum(is.na(dmcar$EstSR))
@@ -159,7 +167,6 @@ for (i in 1:S) {
 }
 head(dmar)
 
-library(ggplot2)
 
 ggplot(dmar, aes(x = sub$meanA, fill = is.na(EstCR))) +
   geom_histogram(binwidth = 2, position = "stack") +

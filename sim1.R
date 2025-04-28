@@ -110,6 +110,14 @@ dmcar
 
 sum(is.na(dmcar$Cor.ws))/S
 
+library(ggplot2)
+
+ggplot(dmcar, aes(x = dat$EstCR, fill = is.na(EstCR))) +
+  geom_histogram(binwidth = 2, position = "stack") +
+  labs(title = "Missingness in CR", x = "EstCR", y = "Count") +
+  scale_fill_manual(values = c("#5B5F97", "#EE6C4D"), name = "CR Missing") +
+  theme_minimal()
+
 ## Missing At Random ####
 
 sub <- d %>%
@@ -130,8 +138,6 @@ for (i in 1:S) {
   }
 }
 head(dmar)
-
-library(ggplot2)
 
 ggplot(dmar, aes(x = sub$meanA, fill = is.na(EstCR))) +
   geom_histogram(binwidth = 2, position = "stack") +
@@ -170,7 +176,7 @@ ggplot(dmnar, aes(x = dat$EstCR, fill = is.na(EstCR))) +
 ## Uniform distribution ####
 
 results = list()
-iter = 10
+iter = 100
 
 dmcar_orig = dmcar 
 
@@ -192,5 +198,6 @@ for (i in 1:iter) {
   results[[i]] = mv.c$coefficients
 }
 
-do.call(rbind, results)
-
+res = do.call(rbind, results)
+hist(res[, 'y1'])
+hist(res[, 'y2'])
