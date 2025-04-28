@@ -149,7 +149,7 @@ beta1 = -0.15  # higher age -> lower prob of CR being observed
 
 sub$likObs = 1 / (1 + exp(-(beta0 + beta1 * sub$meanA)))
 
-M0 <- rbinom(100, size = 1, prob = sub$likObs)
+M0 <- rbinom(S, size = 1, prob = sub$likObs)
 dmar = dat
 
 for (i in 1:S) {
@@ -181,7 +181,7 @@ dmnar = dat
 
 likObs = 1 / (1 + exp(-(beta0 + beta1 * dmnar$EstCR)))
 
-M0 <- rbinom(100, size = 1, prob = likObs)
+M0 <- rbinom(S, size = 1, prob = likObs)
 
 for (i in 1:S) {
   if (M0[i] == 0) {
@@ -189,9 +189,6 @@ for (i in 1:S) {
   }
 }
 head(dmnar)
-sum(is.na(dmnar$EstCR))
-
-library(ggplot2)
 
 ggplot(dmnar, aes(x = dat$EstCR, fill = is.na(EstCR))) +
   geom_histogram(binwidth = 2, position = "stack") +

@@ -1,7 +1,7 @@
 library(mvtnorm)
 library(mixmeta)
 
-S = 100
+S = 500
 N = 1000  
 
 Mu = c(0, 0)
@@ -91,10 +91,10 @@ summary(mv.c)
 
 ## Missing Completely At Random ####
 
-mrate = 0.2
+mrate = 0.1
 size = S*mrate
 M_cr = sample(S, size=size, replace=T)
-M_sr = ifelse(S != M_cr, sample(S, size=size, replace=T))
+M_sr = sample(setdiff(1:S, M_cr), size = size, replace = FALSE)
 
 library(dplyr)
 dmcar <- dat %>%
@@ -108,6 +108,7 @@ dmcar <- dat %>%
 
 dmcar
 
+sum(is.na(dmcar$Cor.ws))/S
 
 ## Missing At Random ####
 
@@ -120,7 +121,7 @@ beta1 = -0.15  # higher age -> lower prob of CR being observed
 
 sub$likObs = 1 / (1 + exp(-(beta0 + beta1 * sub$meanA)))
 
-M0 <- rbinom(100, size = 1, prob = sub$likObs)
+M0 <- rbinom(S, size = 1, prob = sub$likObs)
 dmar = dat
 
 for (i in 1:S) {
@@ -148,7 +149,7 @@ dmnar = dat
 
 likObs = 1 / (1 + exp(-(beta0 + beta1 * dmnar$EstCR)))
 
-M0 <- rbinom(100, size = 1, prob = likObs)
+M0 <- rbinom(S, size = 1, prob = likObs)
 
 for (i in 1:S) {
   if (M0[i] == 0) {
@@ -157,8 +158,6 @@ for (i in 1:S) {
 }
 head(dmnar)
 sum(is.na(dmnar$EstCR))
-
-library(ggplot2)
 
 ggplot(dmnar, aes(x = dat$EstCR, fill = is.na(EstCR))) +
   geom_histogram(binwidth = 2, position = "stack") +
@@ -170,13 +169,12 @@ ggplot(dmnar, aes(x = dat$EstCR, fill = is.na(EstCR))) +
 
 ## Uniform distribution ####
 
-results <- list()
-iter <- 10
+results = list()
+iter = 10
 
-dmcar_orig <- dmcar 
+dmcar_orig = dmcar 
 
 for (i in 1:iter) {
-
   dmcar = dmcar_orig
   
   unif_cr = runif(sum(is.na(dmcar$EstCR)), min = -max(d$CR), max = max(d$CR))
@@ -186,11 +184,9 @@ for (i in 1:iter) {
   dmcar$EstSR[is.na(dmcar$EstSR)] = unif_sr
   
   theta = cbind(dmcar$EstCR, dmcar$EstSR)
-  
   Sigma = cbind(dmcar$SECR^2, cor2cov(dmcar$SECR, dmcar$SESR, dmcar$Cor.ws), 
                  dmcar$SESR^2)
 
-  
   mv.c = mixmeta(theta, Sigma, method = "reml")
   
   results[[i]] = mv.c$coefficients
