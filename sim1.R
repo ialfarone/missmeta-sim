@@ -88,6 +88,10 @@ summary(mv.c)
 
 # Generate missing ####
 
+################################################################################
+# Missing Completely At Random 
+################################################################################
+
 ## Missing Completely At Random ####
 
 mrate = 0.1
@@ -117,16 +121,108 @@ ggplot(dmcar, aes(x = dat$EstCR, fill = is.na(EstCR))) +
   scale_fill_manual(values = c("#5B5F97", "#EE6C4D"), name = "CR Missing") +
   theme_minimal()
 
+# Random sample generator for continuous missing data ####
+
+## Uniform distribution ####
+
+iter = 10
+results = vector(mode = "list", length = iter)
+
+dmcar_orig = dmcar 
+
+for (i in 1:iter) {
+  dmcar = dmcar_orig
+  
+  unif_cr = runif(sum(is.na(dmcar$EstCR)), min = -max(d$CR), max = max(d$CR))
+  unif_sr = runif(sum(is.na(dmcar$EstSR)), min = -max(d$SR), max = max(d$SR))
+  
+  dmcar$EstCR[is.na(dmcar$EstCR)] = unif_cr
+  dmcar$EstSR[is.na(dmcar$EstSR)] = unif_sr
+  
+  # check this
+  dmcar$SECR[is.na(dmcar$SECR)] = 10^2
+  dmcar$SESR[is.na(dmcar$SESR)] = 10^2
+  dmcar$Cor.ws[is.na(dmcar$Cor.ws)] = 0.7
+  
+  theta = cbind(dmcar$EstCR, dmcar$EstSR)
+  
+  Sigma = cbind(dmcar$SECR^2, cor2cov(dmcar$SECR, dmcar$SESR, dmcar$Cor.ws), 
+                 dmcar$SESR^2)
+
+  mv = mixmeta(theta, Sigma, method = "reml")
+  ci = confint(mv)
+  
+  results[[i]] = data.frame(
+    eff1 = mv$coefficients[1],
+    eff2 = mv$coefficients[2],
+    se1 = sqrt(mv$vcov[1,1]),
+    se2 = sqrt(mv$vcov[2,2]),
+    ci.lb1 = ci[1,1],
+    ci.ub1 = ci[1,2],
+    ci.lb2 = ci[2,1],
+    ci.ub2 = ci[2,2])
+}
+
+res = do.call(rbind, results)
+res
+### Option 2: normal distribution with mean 0 and sd 10 and sd 12 
+
+results = vector(mode = "list", length = iter)
+
+dmcar_orig = dmcar 
+
+for (i in 1:iter) {
+  dmcar = dmcar_orig
+  
+  unif_cr = rnorm(sum(is.na(dmcar$EstCR)), mean = 0, sd = 10)
+  unif_sr = rnorm(sum(is.na(dmcar$EstSR)), mean = 0, sd = 12)
+  
+  dmcar$EstCR[is.na(dmcar$EstCR)] = unif_cr
+  dmcar$EstSR[is.na(dmcar$EstSR)] = unif_sr
+  
+  # check this
+  dmcar$SECR[is.na(dmcar$SECR)] = 10^2
+  dmcar$SESR[is.na(dmcar$SESR)] = 10^2
+  dmcar$Cor.ws[is.na(dmcar$Cor.ws)] = 0.7
+  
+  theta = cbind(dmcar$EstCR, dmcar$EstSR)
+  
+  Sigma = cbind(dmcar$SECR^2, cor2cov(dmcar$SECR, dmcar$SESR, dmcar$Cor.ws), 
+                dmcar$SESR^2)
+  
+  mv = mixmeta(theta, Sigma, method = "reml")
+  ci = confint(mv)
+  
+  results[[i]] = data.frame(
+    iter = i,
+    eff1 = mv$coefficients[1],
+    eff2 = mv$coefficients[2],
+    se1 = sqrt(mv$vcov[1,1]),
+    se2 = sqrt(mv$vcov[2,2]),
+    ci.lb1 = ci[1,1],
+    ci.ub1 = ci[1,2],
+    ci.lb2 = ci[2,1],
+    ci.ub2 = ci[2,2])
+}
+
+res2 = do.call(rbind, results)
+
+hist(res2[, 'y1'])
+hist(res2[, 'y2'])
+
+
+################################################################################
+# Missing At Random
+################################################################################
+
 ## Missing At Random ####
 
 sub <- d %>%
   group_by(Study) %>%
   summarise(meanA = mean(Age))
 
-
-
 beta0 = qlogis(0.10)   
-beta1 = 0.15  # higher age -> lower prob of CR being observed
+beta1 = 0.15  # higher age -> higher prob of CR being observed
 
 # plot(sub$meanA, plogis(beta0 + beta1 * (sub$meanA - 18)))
 
@@ -176,41 +272,3 @@ ggplot(dmnar, aes(x = dat$EstCR, fill = is.na(EstCR))) +
   labs(title = "Missingness in CR as a function of CR", x = "EstCR", y = "Count") +
   scale_fill_manual(values = c("#5B5F97", "#EE6C4D"), name = "CR Missing") +
   theme_minimal()
-
-# Random sample generator for continuous missing data ####
-
-## Uniform distribution ####
-
-iter = 10
-results = vector(mode = "list", length = iter)
-
-dmcar_orig = dmcar 
-
-for (i in 1:iter) {
-  dmcar = dmcar_orig
-  
-  unif_cr = runif(sum(is.na(dmcar$EstCR)), min = -max(d$CR), max = max(d$CR))
-  unif_sr = runif(sum(is.na(dmcar$EstSR)), min = -max(d$SR), max = max(d$SR))
-  
-  dmcar$EstCR[is.na(dmcar$EstCR)] = unif_cr
-  dmcar$EstSR[is.na(dmcar$EstSR)] = unif_sr
-  
-  # check this
-  dmcar$SECR[is.na(dmcar$SECR)] = 10^4
-  dmcar$SESR[is.na(dmcar$SESR)] = 10^4
-  dmcar$Cor.ws[is.na(dmcar$Cor.ws)] = 0.7
-  
-  theta = cbind(dmcar$EstCR, dmcar$EstSR)
-  
-  Sigma = cbind(dmcar$SECR^2, cor2cov(dmcar$SECR, dmcar$SESR, dmcar$Cor.ws), 
-                 dmcar$SESR^2)
-
-  mv.c = mixmeta(theta, Sigma, method = "reml")
-  
-  results[[i]] = mv.c$coefficients
-}
-
-res = do.call(rbind, results)
-
-hist(res[, 'y1'])
-hist(res[, 'y2'])
