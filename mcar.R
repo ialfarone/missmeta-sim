@@ -240,3 +240,16 @@ resnorm2 = genimp(
   imprho = 0.7
 )
 resnorm2
+
+resnorm3 = genimp(
+  df = dmcar,
+  distribution = "normal",
+  iter = 20,
+  meanCR = -3, meanSR = -3,
+  sdCR = 10, sdSR = 12,
+  #  impSECR = 100,
+  #  impSESR = 100,
+  imprho = 0.7
+)
+resnorm3
+
