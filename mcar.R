@@ -138,10 +138,10 @@ genimp = function(dmcar_orig,
   }
   
   for (i in 1:iter) {
-    dmcar <- dmcar_orig
+    dmcar = dmcar_orig
     
-    NmissCR <- sum(is.na(dmcar$EstCR))
-    NmissSR <- sum(is.na(dmcar$EstSR))
+    NmissCR = sum(is.na(dmcar$EstCR))
+    NmissSR = sum(is.na(dmcar$EstSR))
     
     # Draw imputed values based on selected distribution
     if (distribution == "uniform") {
