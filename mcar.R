@@ -1,6 +1,7 @@
 library(mvtnorm)
 library(mixmeta)
 library(systemfit)
+library(dplyr)
 
 S = 100
 N = 1000
@@ -72,7 +73,7 @@ head(dat)
 
 ## Multivariate meta-analysis ####
 
-theta <- cbind(dat$EstCR, dat$EstSR)
+theta = cbind(dat$EstCR, dat$EstSR)
 cor2cov = function(sd1, sd2, rho) {
   sd1 * sd2 * rho
 }
@@ -80,10 +81,10 @@ Sigma = cbind(dat$SECR^2,
               cor2cov(dat$SECR, dat$SESR, dat$Cor.ws),
               dat$SESR^2)
 
-mv.c <- mixmeta(theta, Sigma, method = "reml")
+mv.c = mixmeta(theta, Sigma, method = "reml")
 summary(mv.c)
 
-# Generate missing #### 
+# Generate missing ####
 
 ## Missing Completely At Random ####
 
@@ -92,8 +93,7 @@ size = S * mrate
 M_cr = sample(S, size = size, replace = T)
 M_sr = sample(setdiff(1:S, M_cr), size = size, replace = FALSE)
 
-library(dplyr)
-dmcar <- dat %>%
+dmcar = dat %>%
   mutate(
     EstCR = ifelse(Study %in% M_cr, NA, EstCR),
     SECR = ifelse(Study %in% M_cr, NA, SECR),
@@ -116,93 +116,109 @@ ggplot(dmcar, aes(x = dat$EstCR, fill = is.na(EstCR))) +
 
 # Random sample generator for continuous missing data ####
 
-## Uniform distribution ####
-
-iter = 10
-results = vector(mode = "list", length = iter)
-
-dmcar_orig = dmcar
-
-for (i in 1:iter) {
-  dmcar = dmcar_orig
+genimp = function(dmcar_orig,
+                  distribution = c("uniform", "normal"),
+                  iter = NULL,
+                  minCR = NULL,
+                  maxCR = NULL,
+                  minSR = NULL,
+                  maxSR = NULL,
+                  meanCR = NULL,
+                  meanSR = NULL,
+                  sdCR = NULL,
+                  sdSR = NULL,
+                  impSECR = NULL,
+                  impSESR = NULL,
+                  imprho = NULL) {
+  distribution = match.arg(distribution)
+  results = vector(mode = "list", length = iter)
   
-  unif_cr = runif(sum(is.na(dmcar$EstCR)), min = -max(d$CR), max = max(d$CR))
-  unif_sr = runif(sum(is.na(dmcar$EstSR)), min = -max(d$SR), max = max(d$SR))
+  cor2cov = function(sd1, sd2, rho) {
+    sd1 * sd2 * rho
+  }
   
-  dmcar$EstCR[is.na(dmcar$EstCR)] = unif_cr
-  dmcar$EstSR[is.na(dmcar$EstSR)] = unif_sr
+  for (i in 1:iter) {
+    dmcar <- dmcar_orig
+    
+    NmissCR <- sum(is.na(dmcar$EstCR))
+    NmissSR <- sum(is.na(dmcar$EstSR))
+    
+    # Draw imputed values based on selected distribution
+    if (distribution == "uniform") {
+      if (is.null(minCR) || is.null(maxCR) ||
+          is.null(minSR) || is.null(maxSR)) {
+        stop(
+          "For uniform distribution, 'minCR', 'maxCR', 'minSR', and 'maxSR'
+            must all be provided."
+        )
+      }
+      
+      impCR = runif(NmissCR, min = minCR, max = maxCR)
+      impSR = runif(NmissSR, min = minSR, max = maxSR)
+      
+    } else if (distribution == "normal") {
+      if (is.null(sdSR) || is.null(sdSR) ||
+          is.null(meanSR) || is.null(meanSR)) {
+        stop("For normal distribution, 'sd_cr' and 'sd_sr' must both be provided.")
+      }
+      
+      impCR <- rnorm(NmissCR, mean = meanCR, sd = sdCR)
+      impSR <- rnorm(NmissSR, mean = meanSR, sd = sdSR)
+    }
+    
+    dmcar$EstCR[is.na(dmcar$EstCR)] = impCR
+    dmcar$EstSR[is.na(dmcar$EstSR)] = impSR
+    dmcar$SECR[is.na(dmcar$SECR)] = impSECR
+    dmcar$SESR[is.na(dmcar$SESR)] = impSESR
+    dmcar$Cor.ws[is.na(dmcar$Cor.ws)] = imprho
+    
+    theta = cbind(dmcar$EstCR, dmcar$EstSR)
+    Sigma = cbind(dmcar$SECR^2,
+                  cor2cov(dmcar$SECR, dmcar$SESR, dmcar$Cor.ws),
+                  dmcar$SESR^2)
+    
+    mv = mixmeta(theta, Sigma, method = "reml")
+    ci = confint(mv)
+    
+    results[[i]] = data.frame(
+      iter = i,
+      eff1 = mv$coefficients[1],
+      eff2 = mv$coefficients[2],
+      se1 = sqrt(mv$vcov[1, 1]),
+      se2 = sqrt(mv$vcov[2, 2]),
+      ci.lb1 = ci[1, 1],
+      ci.ub1 = ci[1, 2],
+      ci.lb2 = ci[2, 1],
+      ci.ub2 = ci[2, 2]
+    )
+  }
   
-  # check this
-  dmcar$SECR[is.na(dmcar$SECR)] = 10^2
-  dmcar$SESR[is.na(dmcar$SESR)] = 10^2
-  dmcar$Cor.ws[is.na(dmcar$Cor.ws)] = 0.7
-  
-  theta = cbind(dmcar$EstCR, dmcar$EstSR)
-  
-  Sigma = cbind(dmcar$SECR^2,
-                cor2cov(dmcar$SECR, dmcar$SESR, dmcar$Cor.ws),
-                dmcar$SESR^2)
-  
-  mv = mixmeta(theta, Sigma, method = "reml")
-  ci = confint(mv)
-  
-  results[[i]] = data.frame(
-    eff1 = mv$coefficients[1],
-    eff2 = mv$coefficients[2],
-    se1 = sqrt(mv$vcov[1, 1]),
-    se2 = sqrt(mv$vcov[2, 2]),
-    ci.lb1 = ci[1, 1],
-    ci.ub1 = ci[1, 2],
-    ci.lb2 = ci[2, 1],
-    ci.ub2 = ci[2, 2]
-  )
+  do.call(rbind, results)
 }
 
-res = do.call(rbind, results)
-res
-### Option 2: normal distribution with mean 0 and sd 10 and sd 12
+resuni = genimp(
+  dmcar_orig = dmcar,
+  distribution = "uniform",
+  iter = 10,
+  minCR = -max(d$CR),
+  maxCR = max(d$CR),
+  minSR = -max(d$SR),
+  maxSR = max(d$SR),
+  impSECR = 100,
+  impSESR = 100,
+  imprho = 0.7
+)
 
-results = vector(mode = "list", length = iter)
+resuni
 
-dmcar_orig = dmcar
-
-for (i in 1:iter) {
-  dmcar = dmcar_orig
-  
-  unif_cr = rnorm(sum(is.na(dmcar$EstCR)), mean = 0, sd = 10)
-  unif_sr = rnorm(sum(is.na(dmcar$EstSR)), mean = 0, sd = 12)
-  
-  dmcar$EstCR[is.na(dmcar$EstCR)] = unif_cr
-  dmcar$EstSR[is.na(dmcar$EstSR)] = unif_sr
-  
-  # check this
-  dmcar$SECR[is.na(dmcar$SECR)] = 10^2
-  dmcar$SESR[is.na(dmcar$SESR)] = 10^2
-  dmcar$Cor.ws[is.na(dmcar$Cor.ws)] = 0.7
-  
-  theta = cbind(dmcar$EstCR, dmcar$EstSR)
-  
-  Sigma = cbind(dmcar$SECR^2,
-                cor2cov(dmcar$SECR, dmcar$SESR, dmcar$Cor.ws),
-                dmcar$SESR^2)
-  
-  mv = mixmeta(theta, Sigma, method = "reml")
-  ci = confint(mv)
-  
-  results[[i]] = data.frame(
-    iter = i,
-    eff1 = mv$coefficients[1],
-    eff2 = mv$coefficients[2],
-    se1 = sqrt(mv$vcov[1, 1]),
-    se2 = sqrt(mv$vcov[2, 2]),
-    ci.lb1 = ci[1, 1],
-    ci.ub1 = ci[1, 2],
-    ci.lb2 = ci[2, 1],
-    ci.ub2 = ci[2, 2]
-  )
-}
-
-res2 = do.call(rbind, results)
-
-hist(res2[, 'y1'])
-hist(res2[, 'y2'])
+resnorm = genimp(
+  dmcar_orig = dmcar,
+  distribution = "normal",
+  iter = 10,
+  meanCR = 0, meanSR = 0,
+  sdCR = 10, sdSR = 12,
+  impSECR = 100,
+  impSESR = 100,
+  imprho = 0.7
+)
+resnorm
