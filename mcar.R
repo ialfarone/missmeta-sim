@@ -3,7 +3,7 @@ library(mixmeta)
 library(systemfit)
 library(dplyr)
 
-S = 100
+S = 1000
 N = 1000
 
 Mu = c(0, 0)
@@ -205,7 +205,7 @@ genimp = function(df,
 resuni = genimp(
   df = dmcar,
   distribution = "uniform",
-  iter = 100,
+  iter = 1000,
   minCR = -max(d$CR),
   maxCR = max(d$CR),
   minSR = -max(d$SR),
@@ -216,6 +216,55 @@ resuni = genimp(
 )
 
 resuni
+
+## Bias and Coverage from Rubin's rules
+
+### Rubin (IA: write formulae somewhere)
+m = nrow(resuni)
+
+peff1 = mean(resuni$eff1) # pooled effects
+peff2 = mean(resuni$eff2)
+
+pse1 = mean(resuni$se1^2)
+pse2 = mean(resuni$se2^2)
+
+btwvar1 = var(resuni$eff1)
+btwvar2 = var(resuni$eff2)
+
+totvar1 = pse1 + (1 + 1/m) * btwvar1
+totvar2 = pse2 + (1 + 1/m) * btwvar2
+
+pse1 = sqrt(totvar1) # se pooled
+pse2 = sqrt(totvar2)
+
+pci1 = peff1 + c(-1, 1) * qnorm(0.975) * pse1
+pci2 = peff2 + c(-1, 1) * qnorm(0.975) * pse2
+
+#### bias and coverage
+
+true1 = mean(b3 + RTher[, 1])
+true2 = mean(b3 + RTher[, 2])
+
+bias1 = mean(resuni$eff1) - true1
+bias2 = mean(resuni$eff2) - true2
+
+cover1 = mean(resuni$ci.lb1 <= true1 & resuni$ci.ub1 >= true1)
+cover2 = mean(resuni$ci.lb2 <= true2 & resuni$ci.ub2 >= true2)
+
+bias1
+bias2
+
+cover1
+cover2
+
+pci1
+pci2
+
+hist(resuni$eff1 - true1, breaks = 50, main = "Bias Distribution (CR)", xlab = "Bias")
+abline(v = bias1, col = "red", lwd = 2)
+
+##################################HIC SUNT LEONES###############################
+
 
 resnorm = genimp(
   df = dmcar,
