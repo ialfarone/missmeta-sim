@@ -17,7 +17,7 @@ b1 = rnorm(S, mean = 0.5, sd = 0.2)
 b2 = rnorm(S, mean = 1.5, sd = 0.3)
 b3 = 3
 
-dat = vector(mode = "list", length = S)
+data = vector(mode = "list", length = S)
 
 for (i in 1:S) {
   minA = runif(1, min = 18, max = 65)
@@ -47,7 +47,7 @@ for (i in 1:S) {
 
 d = do.call(rbind, data)
 
-data = vector(mode = "list", length = S)
+dat = vector(mode = "list", length = S)
 
 for (s in 1:S) {
   Sn <- d[d$Study == s, ]
@@ -115,8 +115,7 @@ ggplot(dmcar, aes(x = dat$EstCR, fill = is.na(EstCR))) +
   theme_minimal()
 
 # Random sample generator for continuous missing data ####
-
-genimp = function(dmcar_orig,
+genimp = function(df,
                   distribution = c("uniform", "normal"),
                   iter = NULL,
                   minCR = NULL,
@@ -138,10 +137,10 @@ genimp = function(dmcar_orig,
   }
   
   for (i in 1:iter) {
-    dmcar = dmcar_orig
+    dfi = df 
     
-    NmissCR = sum(is.na(dmcar$EstCR))
-    NmissSR = sum(is.na(dmcar$EstSR))
+    NmissCR = sum(is.na(dfi$EstCR))
+    NmissSR = sum(is.na(dfi$EstSR))
     
     # Draw imputed values based on selected distribution
     if (distribution == "uniform") {
@@ -157,32 +156,32 @@ genimp = function(dmcar_orig,
       impSR = runif(NmissSR, min = minSR, max = maxSR)
       
     } else if (distribution == "normal") {
-      if (is.null(sdSR) || is.null(sdSR) ||
-          is.null(meanSR) || is.null(meanSR)) {
-        stop("For normal distribution, 'sd_cr' and 'sd_sr' must both be provided.")
+      if (is.null(sdSR) || is.null(sdCR) ||
+          is.null(meanSR) || is.null(meanCR)) {
+        stop("For normal distribution, 'sdCR' and 'sdSR' must both be provided.")
       }
       
       impCR <- rnorm(NmissCR, mean = meanCR, sd = sdCR)
       impSR <- rnorm(NmissSR, mean = meanSR, sd = sdSR)
     }
     
-    dmcar$EstCR[is.na(dmcar$EstCR)] = impCR
-    dmcar$EstSR[is.na(dmcar$EstSR)] = impSR
+    dfi$EstCR[is.na(dfi$EstCR)] = impCR
+    dfi$EstSR[is.na(dfi$EstSR)] = impSR
 #    dmcar$SECR[is.na(dmcar$SECR)] = impSECR
 #    dmcar$SESR[is.na(dmcar$SESR)] = impSESR
-    dmcar$Cor.ws[is.na(dmcar$Cor.ws)] = imprho
+    dfi$Cor.ws[is.na(dfi$Cor.ws)] = imprho
     
-    impSECR = sample(dmcar$SECR[!is.na(dmcar$SECR)], NmissCR, replace = TRUE) 
-    impSESR = sample(dmcar$SESR[!is.na(dmcar$SESR)], NmissSR, replace = TRUE)
+    impSECR = sample(dfi$SECR[!is.na(dfi$SECR)], NmissCR, replace = TRUE) 
+    impSESR = sample(dfi$SESR[!is.na(dfi$SESR)], NmissSR, replace = TRUE)
     
-    dmcar$SECR[is.na(dmcar$SECR)] = impSECR
-    dmcar$SESR[is.na(dmcar$SESR)] = impSESR
+    dfi$SECR[is.na(dfi$SECR)] = impSECR
+    dfi$SESR[is.na(dfi$SESR)] = impSESR
     
     
-    theta = cbind(dmcar$EstCR, dmcar$EstSR)
-    Sigma = cbind(dmcar$SECR^2,
-                  cor2cov(dmcar$SECR, dmcar$SESR, dmcar$Cor.ws),
-                  dmcar$SESR^2)
+    theta = cbind(dfi$EstCR, dfi$EstSR)
+    Sigma = cbind(dfi$SECR^2,
+                  cor2cov(dfi$SECR, dfi$SESR, dfi$Cor.ws),
+                  dfi$SESR^2)
     
     mv = mixmeta(theta, Sigma, method = "reml")
     ci = confint(mv)
@@ -204,9 +203,9 @@ genimp = function(dmcar_orig,
 }
 
 resuni = genimp(
-  dmcar_orig = dmcar,
+  df = dmcar,
   distribution = "uniform",
-  iter = 10,
+  iter = 100,
   minCR = -max(d$CR),
   maxCR = max(d$CR),
   minSR = -max(d$SR),
@@ -219,9 +218,9 @@ resuni = genimp(
 resuni
 
 resnorm = genimp(
-  dmcar_orig = dmcar,
+  df = dmcar,
   distribution = "normal",
-  iter = 10,
+  iter = 20,
   meanCR = 0, meanSR = 0,
   sdCR = 10, sdSR = 12,
 #  impSECR = 100,
@@ -231,9 +230,9 @@ resnorm = genimp(
 resnorm
 
 resnorm2 = genimp(
-  dmcar_orig = dmcar,
+  df = dmcar,
   distribution = "normal",
-  iter = 10,
+  iter = 20,
   meanCR = 3, meanSR = 3,
   sdCR = 10, sdSR = 12,
   #  impSECR = 100,
