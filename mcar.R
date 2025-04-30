@@ -127,8 +127,8 @@ genimp = function(dmcar_orig,
                   meanSR = NULL,
                   sdCR = NULL,
                   sdSR = NULL,
-                  impSECR = NULL,
-                  impSESR = NULL,
+#                  impSECR = NULL,
+#                  impSESR = NULL,
                   imprho = NULL) {
   distribution = match.arg(distribution)
   results = vector(mode = "list", length = iter)
@@ -168,9 +168,16 @@ genimp = function(dmcar_orig,
     
     dmcar$EstCR[is.na(dmcar$EstCR)] = impCR
     dmcar$EstSR[is.na(dmcar$EstSR)] = impSR
+#    dmcar$SECR[is.na(dmcar$SECR)] = impSECR
+#    dmcar$SESR[is.na(dmcar$SESR)] = impSESR
+    dmcar$Cor.ws[is.na(dmcar$Cor.ws)] = imprho
+    
+    impSECR = sample(dmcar$SECR[!is.na(dmcar$SECR)], NmissCR, replace = TRUE) 
+    impSESR = sample(dmcar$SESR[!is.na(dmcar$SESR)], NmissSR, replace = TRUE)
+    
     dmcar$SECR[is.na(dmcar$SECR)] = impSECR
     dmcar$SESR[is.na(dmcar$SESR)] = impSESR
-    dmcar$Cor.ws[is.na(dmcar$Cor.ws)] = imprho
+    
     
     theta = cbind(dmcar$EstCR, dmcar$EstSR)
     Sigma = cbind(dmcar$SECR^2,
@@ -204,8 +211,8 @@ resuni = genimp(
   maxCR = max(d$CR),
   minSR = -max(d$SR),
   maxSR = max(d$SR),
-  impSECR = 100,
-  impSESR = 100,
+#  impSECR = 100,
+#  impSESR = 100,
   imprho = 0.7
 )
 
@@ -217,8 +224,20 @@ resnorm = genimp(
   iter = 10,
   meanCR = 0, meanSR = 0,
   sdCR = 10, sdSR = 12,
-  impSECR = 100,
-  impSESR = 100,
+#  impSECR = 100,
+#  impSESR = 100,
   imprho = 0.7
 )
 resnorm
+
+resnorm2 = genimp(
+  dmcar_orig = dmcar,
+  distribution = "normal",
+  iter = 10,
+  meanCR = 3, meanSR = 3,
+  sdCR = 10, sdSR = 12,
+  #  impSECR = 100,
+  #  impSESR = 100,
+  imprho = 0.7
+)
+resnorm2
