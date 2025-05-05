@@ -226,6 +226,10 @@ genimp = function(df,
   do.call(rbind, results)
 }
 
+##################
+#### Uniform #####
+##################
+
 resuni = genimp(
   df = dmcar,
   distribution = "uniform",
@@ -234,8 +238,6 @@ resuni = genimp(
   maxCR = max(d$CR),
   minSR = -max(d$SR),
   maxSR = max(d$SR),
-#  impSECR = 100,
-#  impSESR = 100,
   imprho = 0.7
 )
 
@@ -287,7 +289,9 @@ pci2
 hist(resuni$eff1 - true1, breaks = 50, main = "Bias Distribution (CR)", xlab = "Bias")
 abline(v = bias1, col = "red", lwd = 2)
 
-##################################HIC SUNT LEONES##############################
+################
+#### Normal ####
+################
 
 resnorm = genimp(
   df = dmcar,
@@ -295,8 +299,6 @@ resnorm = genimp(
   iter = 20,
   meanCR = 0, meanSR = 0,
   sdCR = 10, sdSR = 12,
-#  impSECR = 100,
-#  impSESR = 100,
   imprho = 0.7
 )
 resnorm
@@ -366,13 +368,13 @@ resnorm3 = genimp(
   iter = 20,
   meanCR = -3, meanSR = -3,
   sdCR = 10, sdSR = 12,
-  #  impSECR = 100,
-  #  impSESR = 100,
   imprho = 0.7
 )
 resnorm3
 
-################################################################################
+#############################
+##### Truncate MVNormal #####
+#############################
 
 lower = c(-Inf, -Inf)
 upper = c(Inf, Inf)
@@ -385,4 +387,5 @@ restmvn = genimp(
   upper = upper, 
   imprho = 0.7
 )
+
 restmvn
