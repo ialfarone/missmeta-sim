@@ -2,8 +2,9 @@ library(mvtnorm)
 library(mixmeta)
 library(systemfit)
 library(dplyr)
+library(tmvtnorm)
 
-S = 1000
+S = 100
 N = 1000
 
 Mu = c(0, 0)
@@ -116,7 +117,7 @@ ggplot(dmcar, aes(x = dat$EstCR, fill = is.na(EstCR))) +
 
 # Random sample generator for continuous missing data ####
 genimp = function(df,
-                  distribution = c("uniform", "normal"),
+                  distribution = c("uniform", "normal","tmvn"),
                   iter = NULL,
                   minCR = NULL,
                   maxCR = NULL,
@@ -126,6 +127,8 @@ genimp = function(df,
                   meanSR = NULL,
                   sdCR = NULL,
                   sdSR = NULL,
+                  lower = NULL, 
+                  upper = NULL,
 #                  impSECR = NULL,
 #                  impSESR = NULL,
                   imprho = NULL) {
@@ -161,12 +164,33 @@ genimp = function(df,
         stop("For normal distribution, 'sdCR' and 'sdSR' must both be provided.")
       }
       
-      impCR <- rnorm(NmissCR, mean = meanCR, sd = sdCR)
-      impSR <- rnorm(NmissSR, mean = meanSR, sd = sdSR)
+      impCR = rnorm(NmissCR, mean = meanCR, sd = sdCR)
+      impSR = rnorm(NmissSR, mean = meanSR, sd = sdSR)
+    
+    } else if (distribution == "tmvn") {
+      if (is.null(lower) || is.null(upper)) {
+        stop("For troncate multivariate normal distribution, 
+             'lower' and 'upper' must both be provided.")
+      }
+      
+      muObs = colMeans(cbind(dfi$EstCR, dfi$EstSR), na.rm = TRUE)
+      SigmaObs = cov(cbind(dfi$EstCR, dfi$EstSR), use = "complete.obs")
+      
+      imputed <- rtmvnorm(
+        n = sum(is.na(dfi$Cor.ws)),
+        mean = muObs,
+        sigma = SigmaObs,
+        lower = lower,
+        upper = upper
+      )
+      
+      impCR = imputed[, 1]
+      impSR = imputed[, 2]
     }
     
-    dfi$EstCR[is.na(dfi$EstCR)] = impCR
-    dfi$EstSR[is.na(dfi$EstSR)] = impSR
+    
+    dfi$EstCR[is.na(dfi$EstCR)] = sample(impCR, NmissCR, replace = F)
+    dfi$EstSR[is.na(dfi$EstSR)] = sample(impSR, NmissSR, replace = F)
 #    dmcar$SECR[is.na(dmcar$SECR)] = impSECR
 #    dmcar$SESR[is.na(dmcar$SESR)] = impSESR
     dfi$Cor.ws[is.na(dfi$Cor.ws)] = imprho
@@ -205,7 +229,7 @@ genimp = function(df,
 resuni = genimp(
   df = dmcar,
   distribution = "uniform",
-  iter = 1000,
+  iter = 10,
   minCR = -max(d$CR),
   maxCR = max(d$CR),
   minSR = -max(d$SR),
@@ -278,6 +302,53 @@ resnorm = genimp(
 )
 resnorm
 
+## Bias and Coverage from Rubin's rules
+
+### Rubin (IA: write formulae somewhere)
+m = nrow(resnorm)
+
+peff1 = mean(resnorm$eff1) # pooled effects
+peff2 = mean(resnorm$eff2)
+
+pse1 = mean(resnorm$se1^2)
+pse2 = mean(resnorm$se2^2)
+
+btwvar1 = var(resnorm$eff1)
+btwvar2 = var(resnorm$eff2)
+
+totvar1 = pse1 + (1 + 1/m) * btwvar1
+totvar2 = pse2 + (1 + 1/m) * btwvar2
+
+pse1 = sqrt(totvar1) # se pooled
+pse2 = sqrt(totvar2)
+
+pci1 = peff1 + c(-1, 1) * qnorm(0.975) * pse1
+pci2 = peff2 + c(-1, 1) * qnorm(0.975) * pse2
+
+#### bias and coverage
+
+true1 = mean(b3 + RTher[, 1])
+true2 = mean(b3 + RTher[, 2])
+
+bias1 = mean(resnorm$eff1) - true1
+bias2 = mean(resnorm$eff2) - true2
+
+cover1 = mean(resnorm$ci.lb1 <= true1 & resnorm$ci.ub1 >= true1)
+cover2 = mean(resnorm$ci.lb2 <= true2 & resnorm$ci.ub2 >= true2)
+
+bias1
+bias2
+
+cover1
+cover2
+
+pci1
+pci2
+
+hist(resnorm$eff1 - true1, breaks = 50, main = "Bias Distribution (CR)", xlab = "Bias")
+abline(v = bias1, col = "red", lwd = 2)
+
+
 resnorm2 = genimp(
   df = dmcar,
   distribution = "normal",
@@ -302,3 +373,17 @@ resnorm3 = genimp(
 )
 resnorm3
 
+################################################################################
+
+lower = c(-Inf, -Inf)
+upper = c(Inf, Inf)
+
+restmvn = genimp(
+  df = dmcar,
+  distribution = "tmvn",
+  iter = 10,
+  lower = lower,
+  upper = upper, 
+  imprho = 0.7
+)
+restmvn
