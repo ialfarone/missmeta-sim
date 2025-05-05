@@ -5,7 +5,7 @@ library(dplyr)
 library(ggplot2)
 library(tmvtnorm)
 
-S = 500
+S = 100
 N = 1000
 
 Mu = c(0, 0)
@@ -90,8 +90,8 @@ summary(mv.c)
 
 ## Missing Not At Random ####
 
-beta0 = 0     
-beta1 = 0.30  # lower EstCR -> lower prob of CR being observed
+beta0 = -1.5     
+beta1 = 1.5  # lower EstCR -> lower prob of CR being observed
 
 dmnar = dat
 
@@ -115,6 +115,16 @@ ggplot(dmnar, aes(x = dat$EstCR, fill = is.na(EstCR))) +
   scale_fill_manual(values = c("#5B5F97", "#EE6C4D"), name = "CR Missing") +
   theme_minimal()
 
+## Multivariate meta-analysis #### Check
+
+theta.m = cbind(dmnar$EstCR, dmnar$EstSR)
+Sigma.m = cbind(dmnar$SECR^2,
+              cor2cov(dmnar$SECR, dmnar$SESR, dmnar$Cor.ws),
+              dmnar$SESR^2)
+
+mv.m = mixmeta(theta.m, Sigma.m, method = "reml")
+summary(mv.m)
+
 
 # Random sample generator for continuous missing data for MNAR ####
 genimp.pmm = function(df,
@@ -130,6 +140,8 @@ genimp.pmm = function(df,
                   sdSR = NULL,
                   #                  impSECR = NULL,
                   #                  impSESR = NULL,
+                  lower = lower, 
+                  upper = upper, 
                   imprho = NULL,
                   scaleSE = NULL) {
   distribution = match.arg(distribution)
@@ -140,45 +152,31 @@ genimp.pmm = function(df,
   }
   
   for (i in 1:iter) {
-    dfi = df
+    dfi = df 
     
     NmissCR = sum(is.na(dfi$EstCR))
     NmissSR = sum(is.na(dfi$EstSR))
     
-    # Draw imputed values based on selected distribution
     if (distribution == "uniform") {
-      if (is.null(minCR) || is.null(maxCR) ||
-          is.null(minSR) || is.null(maxSR)) {
-        stop(
-          "For uniform distribution, 'minCR', 'maxCR', 'minSR', and 'maxSR'
-            must all be provided."
-        )
-      }
       
       impCR = runif(NmissCR, min = minCR, max = maxCR)
       impSR = runif(NmissSR, min = minSR, max = maxSR)
       
     } else if (distribution == "normal") {
-      if (is.null(sdSR) || is.null(sdCR) ||
-          is.null(meanSR) || is.null(meanCR)) {
-        stop("For normal distribution, 'sdCR' and 'sdSR' must both be provided.")
-      }
       
-      impCR <- rnorm(NmissCR, mean = meanCR, sd = sdCR)
-      impSR <- rnorm(NmissSR, mean = meanSR, sd = sdSR)
-    
+      impCR = rnorm(NmissCR, mean = meanCR, sd = sdCR)
+      impSR = rnorm(NmissSR, mean = meanSR, sd = sdSR)
+      
     } else if (distribution == "tmvn") {
-      if (is.null(lower) || is.null(upper)) {
-        stop("For troncate multivariate normal distribution, 
-             'lower' and 'upper' must both be provided.")
-      }
       
-      muObs = colMeans(cbind(dfi$EstCR, dfi$EstSR), na.rm = TRUE)
-      SigmaObs = cov(cbind(dfi$EstCR, dfi$EstSR), use = "complete.obs")
+ #     muObs = colMeans(cbind(dfi$EstCR, dfi$EstSR), na.rm = TRUE)
+   # SigmaObs = cov(cbind(dfi$EstCR, dfi$EstSR), use = "complete.obs")
+
+      SigmaObs = matrix(c(10, 7, 7, 10), 2, 2)
       
-      imputed <- rtmvnorm(
+       imputed <- rtmvnorm(
         n = sum(is.na(dfi$Cor.ws)),
-        mean = muObs,
+        mean = c(0,0),
         sigma = SigmaObs,
         lower = lower,
         upper = upper
@@ -189,12 +187,11 @@ genimp.pmm = function(df,
     }
     
     
-    dfi$EstCR[is.na(dfi$EstCR)] = impCR
-    dfi$EstSR[is.na(dfi$EstSR)] = impSR
+    dfi$EstCR[is.na(dfi$EstCR)] = sample(impCR, NmissCR, replace = F)
+    dfi$EstSR[is.na(dfi$EstSR)] = sample(impSR, NmissSR, replace = F)
     #    dmcar$SECR[is.na(dmcar$SECR)] = impSECR
     #    dmcar$SESR[is.na(dmcar$SESR)] = impSESR
     dfi$Cor.ws[is.na(dfi$Cor.ws)] = imprho
-    
     
     impSECR = sample(dfi$SECR[!is.na(dfi$SECR)], NmissCR, replace = TRUE) * scaleSE
     impSESR = sample(dfi$SESR[!is.na(dfi$SESR)], NmissSR, replace = TRUE) * scaleSE
@@ -291,20 +288,18 @@ resnorm3
 ##### Truncate MVNormal #####
 #############################
 
-lower = c(-Inf, -Inf)
-upper = c(Inf, Inf)
+lower = c(-10, -10)
+upper = c(5, 5)
 
 
 restmvn = genimp.pmm(
   df = dmnar,
   distribution = "tmvn",
   iter = 100,
-  meanCR = -3,
-  meanSR = -3,
-  sdCR = 10,
-  sdSR = 12,
   imprho = 0.7,
-  scaleSE = 1.5
+  scaleSE = 1.5,
+  lower = lower,
+  upper = upper
 )
 restmvn
 
