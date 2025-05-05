@@ -287,8 +287,7 @@ pci2
 hist(resuni$eff1 - true1, breaks = 50, main = "Bias Distribution (CR)", xlab = "Bias")
 abline(v = bias1, col = "red", lwd = 2)
 
-##################################HIC SUNT LEONES###############################
-
+##################################HIC SUNT LEONES##############################
 
 resnorm = genimp(
   df = dmcar,
