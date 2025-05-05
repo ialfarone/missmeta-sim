@@ -145,7 +145,6 @@ genimp = function(df,
     NmissCR = sum(is.na(dfi$EstCR))
     NmissSR = sum(is.na(dfi$EstSR))
     
-    # Draw imputed values based on selected distribution
     if (distribution == "uniform") {
       if (is.null(minCR) || is.null(maxCR) ||
           is.null(minSR) || is.null(maxSR)) {

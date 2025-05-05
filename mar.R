@@ -2,6 +2,8 @@ library(mvtnorm)
 library(mixmeta)
 library(systemfit)
 library(dplyr)
+library(ggplot2)
+library(tmvtnorm)
 
 S = 100
 N = 1000
@@ -17,7 +19,7 @@ b1 = rnorm(S, mean = 0.5, sd = 0.2)
 b2 = rnorm(S, mean = 1.5, sd = 0.3)
 b3 = 3
 
-dat = vector(mode = "list", length = S)
+data = vector(mode = "list", length = S)
 
 for (i in 1:S) {
   minA = runif(1, min = 18, max = 65)
@@ -47,16 +49,16 @@ for (i in 1:S) {
 
 d = do.call(rbind, data)
 
-data = vector(mode = "list", length = S)
+dat = vector(mode = "list", length = S)
 
 for (s in 1:S) {
-  Sn <- d[d$Study == s, ]
+  Sn = d[d$Study == s, ]
   
-  m1 <- CR ~ Age + Sex + Ther
-  m2 <- SR ~ Age + Sex + Ther
+  m1 = CR ~ Age + Sex + Ther
+  m2 = SR ~ Age + Sex + Ther
   
-  fitsur <- systemfit(list(CR = m1, SR = m2), "SUR", data = Sn)
-  sum <- summary(fitsur)
+  fitsur = systemfit(list(CR = m1, SR = m2), "SUR", data = Sn)
+  sum = summary(fitsur)
   
   dat[[s]] = data.frame(
     Study = s,
@@ -124,7 +126,7 @@ ggplot(dmar, aes(x = sub$meanA, fill = is.na(EstCR))) +
 
 # Random sample generator for continuous missing data ####
 genimp = function(df,
-                  distribution = c("uniform", "normal"),
+                  distribution = c("uniform", "normal","tmvn"),
                   iter = NULL,
                   minCR = NULL,
                   maxCR = NULL,
@@ -134,6 +136,8 @@ genimp = function(df,
                   meanSR = NULL,
                   sdCR = NULL,
                   sdSR = NULL,
+                  lower = NULL, 
+                  upper = NULL,
                   #                  impSECR = NULL,
                   #                  impSESR = NULL,
                   imprho = NULL) {
@@ -145,12 +149,11 @@ genimp = function(df,
   }
   
   for (i in 1:iter) {
-    dfi = df
+    dfi = df 
     
     NmissCR = sum(is.na(dfi$EstCR))
     NmissSR = sum(is.na(dfi$EstSR))
     
-    # Draw imputed values based on selected distribution
     if (distribution == "uniform") {
       if (is.null(minCR) || is.null(maxCR) ||
           is.null(minSR) || is.null(maxSR)) {
@@ -169,17 +172,38 @@ genimp = function(df,
         stop("For normal distribution, 'sdCR' and 'sdSR' must both be provided.")
       }
       
-      impCR <- rnorm(NmissCR, mean = meanCR, sd = sdCR)
-      impSR <- rnorm(NmissSR, mean = meanSR, sd = sdSR)
+      impCR = rnorm(NmissCR, mean = meanCR, sd = sdCR)
+      impSR = rnorm(NmissSR, mean = meanSR, sd = sdSR)
+      
+    } else if (distribution == "tmvn") {
+      if (is.null(lower) || is.null(upper)) {
+        stop("For troncate multivariate normal distribution, 
+             'lower' and 'upper' must both be provided.")
+      }
+      
+      muObs = colMeans(cbind(dfi$EstCR, dfi$EstSR), na.rm = TRUE)
+      SigmaObs = cov(cbind(dfi$EstCR, dfi$EstSR), use = "complete.obs")
+      
+      imputed <- rtmvnorm(
+        n = sum(is.na(dfi$Cor.ws)),
+        mean = muObs,
+        sigma = SigmaObs,
+        lower = lower,
+        upper = upper
+      )
+      
+      impCR = imputed[, 1]
+      impSR = imputed[, 2]
     }
     
-    dfi$EstCR[is.na(dfi$EstCR)] = impCR
-    dfi$EstSR[is.na(dfi$EstSR)] = impSR
+    
+    dfi$EstCR[is.na(dfi$EstCR)] = sample(impCR, NmissCR, replace = F)
+    dfi$EstSR[is.na(dfi$EstSR)] = sample(impSR, NmissSR, replace = F)
     #    dmcar$SECR[is.na(dmcar$SECR)] = impSECR
     #    dmcar$SESR[is.na(dmcar$SESR)] = impSESR
     dfi$Cor.ws[is.na(dfi$Cor.ws)] = imprho
     
-    impSECR = sample(dfi$SECR[!is.na(dfi$SECR)], NmissCR, replace = TRUE)
+    impSECR = sample(dfi$SECR[!is.na(dfi$SECR)], NmissCR, replace = TRUE) 
     impSESR = sample(dfi$SESR[!is.na(dfi$SESR)], NmissSR, replace = TRUE)
     
     dfi$SECR[is.na(dfi$SECR)] = impSECR
@@ -209,6 +233,7 @@ genimp = function(df,
   
   do.call(rbind, results)
 }
+
 
 resuni = genimp(
   df = dmar,
@@ -253,7 +278,7 @@ resnorm2 = genimp(
 resnorm2
 
 resnorm3 = genimp(
-  df = dmcar,
+  df = dmar,
   distribution = "normal",
   iter = 20,
   meanCR = -3,
@@ -265,3 +290,24 @@ resnorm3 = genimp(
   imprho = 0.7
 )
 resnorm3
+
+#############################
+##### Truncate MVNormal #####
+#############################
+
+lower = c(-Inf, -Inf)
+upper = c(Inf, Inf)
+
+restmvn = genimp(
+  df = dmar,
+  distribution = "tmvn",
+  iter = 10,
+  lower = lower,
+  upper = upper, 
+  imprho = 0.7
+)
+
+restmvn
+
+
+
