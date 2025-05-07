@@ -209,6 +209,10 @@ genimp = function(df,
   do.call(rbind, results)
 }
 
+# Occhio che https://cran.r-project.org/web/packages/metavcov/metavcov.pdf 
+# incorpora gia' MI con multivariate meta analisi. Questo puo' dare un po'
+# di solidita' e evidence 
+
 #################################
 #### Multivariate with MCAR #####
 #################################
