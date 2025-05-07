@@ -124,7 +124,24 @@ ggplot(dmar, aes(x = sub$meanA, fill = is.na(EstCR))) +
   scale_fill_manual(values = c("#5B5F97", "#EE6C4D"), name = "CR Missing") +
   theme_minimal()
 
+#################################
+#### Multivariate with MAR #####
+#################################
+
+theta.m = cbind(dmar$EstCR, dmar$EstSR)
+Sigma.m = cbind(dmar$SECR^2,
+                cor2cov(dmar$SECR, dmar$SESR, dmar$Cor.ws),
+                dmar$SESR^2)
+
+mv.m = mixmeta(theta.m, Sigma.m, method = "reml")
+summary(mv.m)
+
+# I wouldn't bother imputing
+
+##########################################################
 # Random sample generator for continuous missing data ####
+##########################################################
+
 genimp = function(df,
                   distribution = c("uniform", "normal","tmvn"),
                   iter = NULL,
@@ -155,36 +172,18 @@ genimp = function(df,
     NmissSR = sum(is.na(dfi$EstSR))
     
     if (distribution == "uniform") {
-      if (is.null(minCR) || is.null(maxCR) ||
-          is.null(minSR) || is.null(maxSR)) {
-        stop(
-          "For uniform distribution, 'minCR', 'maxCR', 'minSR', and 'maxSR'
-            must all be provided."
-        )
-      }
-      
       impCR = runif(NmissCR, min = minCR, max = maxCR)
       impSR = runif(NmissSR, min = minSR, max = maxSR)
       
-    } else if (distribution == "normal") {
-      if (is.null(sdSR) || is.null(sdCR) ||
-          is.null(meanSR) || is.null(meanCR)) {
-        stop("For normal distribution, 'sdCR' and 'sdSR' must both be provided.")
-      }
-      
+    } else if (distribution == "normal") { 
       impCR = rnorm(NmissCR, mean = meanCR, sd = sdCR)
       impSR = rnorm(NmissSR, mean = meanSR, sd = sdSR)
       
     } else if (distribution == "tmvn") {
-      if (is.null(lower) || is.null(upper)) {
-        stop("For troncate multivariate normal distribution, 
-             'lower' and 'upper' must both be provided.")
-      }
-      
       muObs = colMeans(cbind(dfi$EstCR, dfi$EstSR), na.rm = TRUE)
       SigmaObs = cov(cbind(dfi$EstCR, dfi$EstSR), use = "complete.obs")
       
-      imputed <- rtmvnorm(
+      imputed = rtmvnorm(
         n = sum(is.na(dfi$Cor.ws)),
         mean = muObs,
         sigma = SigmaObs,
@@ -195,7 +194,6 @@ genimp = function(df,
       impCR = imputed[, 1]
       impSR = imputed[, 2]
     }
-    
     
     dfi$EstCR[is.na(dfi$EstCR)] = sample(impCR, NmissCR, replace = F)
     dfi$EstSR[is.na(dfi$EstSR)] = sample(impSR, NmissSR, replace = F)
@@ -208,7 +206,6 @@ genimp = function(df,
     
     dfi$SECR[is.na(dfi$SECR)] = impSECR
     dfi$SESR[is.na(dfi$SESR)] = impSESR
-    
     
     theta = cbind(dfi$EstCR, dfi$EstSR)
     Sigma = cbind(dfi$SECR^2,
