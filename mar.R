@@ -153,6 +153,8 @@ genimp = function(df,
                   meanSR = NULL,
                   sdCR = NULL,
                   sdSR = NULL,
+                  meantmv = NULL, 
+                  sigmatmv = NULL, 
                   lower = NULL, 
                   upper = NULL,
                   #                  impSECR = NULL,
@@ -172,21 +174,21 @@ genimp = function(df,
     NmissSR = sum(is.na(dfi$EstSR))
     
     if (distribution == "uniform") {
+      
       impCR = runif(NmissCR, min = minCR, max = maxCR)
       impSR = runif(NmissSR, min = minSR, max = maxSR)
       
-    } else if (distribution == "normal") { 
+    } else if (distribution == "normal") {
+      
       impCR = rnorm(NmissCR, mean = meanCR, sd = sdCR)
       impSR = rnorm(NmissSR, mean = meanSR, sd = sdSR)
       
     } else if (distribution == "tmvn") {
-      muObs = colMeans(cbind(dfi$EstCR, dfi$EstSR), na.rm = TRUE)
-      SigmaObs = cov(cbind(dfi$EstCR, dfi$EstSR), use = "complete.obs")
       
       imputed = rtmvnorm(
         n = sum(is.na(dfi$Cor.ws)),
-        mean = muObs,
-        sigma = SigmaObs,
+        mean = meantmv,
+        sigma = sigmatmv,
         lower = lower,
         upper = upper
       )
@@ -195,17 +197,19 @@ genimp = function(df,
       impSR = imputed[, 2]
     }
     
+    
     dfi$EstCR[is.na(dfi$EstCR)] = sample(impCR, NmissCR, replace = F)
     dfi$EstSR[is.na(dfi$EstSR)] = sample(impSR, NmissSR, replace = F)
     #    dmcar$SECR[is.na(dmcar$SECR)] = impSECR
     #    dmcar$SESR[is.na(dmcar$SESR)] = impSESR
     dfi$Cor.ws[is.na(dfi$Cor.ws)] = imprho
     
-    impSECR = sample(dfi$SECR[!is.na(dfi$SECR)], NmissCR, replace = TRUE) 
-    impSESR = sample(dfi$SESR[!is.na(dfi$SESR)], NmissSR, replace = TRUE)
+    impSECR = rnorm(NmissCR, mean(dfi$SECR, na.rm = T), sd(dfi$SECR, na.rm = T)) 
+    impSESR = rnorm(NmissSR, mean(dfi$SESR, na.rm = T), sd(dfi$SESR, na.rm = T))
     
     dfi$SECR[is.na(dfi$SECR)] = impSECR
     dfi$SESR[is.na(dfi$SESR)] = impSESR
+    
     
     theta = cbind(dfi$EstCR, dfi$EstSR)
     Sigma = cbind(dfi$SECR^2,
@@ -294,8 +298,11 @@ resnorm3
 ##### Truncate MVNormal #####
 #############################
 
-lower = c(-Inf, -Inf)
+lower = c(-Inf, -Inf) # for now simply multivariate
 upper = c(Inf, Inf)
+
+meantmv = colMeans(cbind(dmcar$EstCR, dmcar$EstSR), na.rm = TRUE)
+sigmatmv = cov(cbind(dmcar$EstCR, dmcar$EstSR), use = "complete.obs")
 
 restmvn = genimp(
   df = dmar,
@@ -303,6 +310,8 @@ restmvn = genimp(
   iter = 10,
   lower = lower,
   upper = upper, 
+  meantmv = meantmv,
+  sigmatmv = sigmatmv, 
   imprho = 0.7
 )
 

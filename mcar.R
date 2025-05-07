@@ -127,6 +127,8 @@ genimp = function(df,
                   meanSR = NULL,
                   sdCR = NULL,
                   sdSR = NULL,
+                  meantmv = NULL, 
+                  sigmatmv = NULL, 
                   lower = NULL, 
                   upper = NULL,
 #                  impSECR = NULL,
@@ -146,39 +148,21 @@ genimp = function(df,
     NmissSR = sum(is.na(dfi$EstSR))
     
     if (distribution == "uniform") {
-      if (is.null(minCR) || is.null(maxCR) ||
-          is.null(minSR) || is.null(maxSR)) {
-        stop(
-          "For uniform distribution, 'minCR', 'maxCR', 'minSR', and 'maxSR'
-            must all be provided."
-        )
-      }
       
       impCR = runif(NmissCR, min = minCR, max = maxCR)
       impSR = runif(NmissSR, min = minSR, max = maxSR)
       
     } else if (distribution == "normal") {
-      if (is.null(sdSR) || is.null(sdCR) ||
-          is.null(meanSR) || is.null(meanCR)) {
-        stop("For normal distribution, 'sdCR' and 'sdSR' must both be provided.")
-      }
       
       impCR = rnorm(NmissCR, mean = meanCR, sd = sdCR)
       impSR = rnorm(NmissSR, mean = meanSR, sd = sdSR)
     
     } else if (distribution == "tmvn") {
-      if (is.null(lower) || is.null(upper)) {
-        stop("For troncate multivariate normal distribution, 
-             'lower' and 'upper' must both be provided.")
-      }
       
-      muObs = colMeans(cbind(dfi$EstCR, dfi$EstSR), na.rm = TRUE)
-      SigmaObs = cov(cbind(dfi$EstCR, dfi$EstSR), use = "complete.obs")
-      
-      imputed <- rtmvnorm(
+      imputed = rtmvnorm(
         n = sum(is.na(dfi$Cor.ws)),
-        mean = muObs,
-        sigma = SigmaObs,
+        mean = meantmv,
+        sigma = sigmatmv,
         lower = lower,
         upper = upper
       )
@@ -194,8 +178,8 @@ genimp = function(df,
 #    dmcar$SESR[is.na(dmcar$SESR)] = impSESR
     dfi$Cor.ws[is.na(dfi$Cor.ws)] = imprho
     
-    impSECR = sample(dfi$SECR[!is.na(dfi$SECR)], NmissCR, replace = TRUE) 
-    impSESR = sample(dfi$SESR[!is.na(dfi$SESR)], NmissSR, replace = TRUE)
+    impSECR = rnorm(NmissCR, mean(dfi$SECR, na.rm = T), sd(dfi$SECR, na.rm = T)) 
+    impSESR = rnorm(NmissSR, mean(dfi$SESR, na.rm = T), sd(dfi$SESR, na.rm = T))
     
     dfi$SECR[is.na(dfi$SECR)] = impSECR
     dfi$SESR[is.na(dfi$SESR)] = impSESR
@@ -322,7 +306,6 @@ sdSR = 12
 impCR = rnorm(NmissCR, mean = meanCR, sd = sdCR)
 impSR = rnorm(NmissSR, mean = meanSR, sd = sdSR)
 plot(impCR)
-plot(impSR)
 
 resnorm = genimp(
   df = dmcar,
@@ -407,8 +390,13 @@ resnorm3
 ##### Truncate MVNormal #####
 #############################
 
-lower = c(-Inf, -Inf)
+lower = c(-Inf, -Inf) # for now simply multivariate
 upper = c(Inf, Inf)
+
+# for now from the data, but this does not hold for MNAR or MAR 
+
+meantmv = colMeans(cbind(dmcar$EstCR, dmcar$EstSR), na.rm = TRUE)
+sigmatmv = cov(cbind(dmcar$EstCR, dmcar$EstSR), use = "complete.obs")
 
 restmvn = genimp(
   df = dmcar,
@@ -416,93 +404,9 @@ restmvn = genimp(
   iter = 10,
   lower = lower,
   upper = upper, 
+  meantmv = meantmv,
+  sigmatmv = sigmatmv, 
   imprho = 0.7
 )
 
 restmvn
-
-
-################################################################################
-# Calculate bias and coverage and compare
-
-evaluate_method <- function(res, true1, true2, method_name) {
-  m <- nrow(res)
-  
-  peff1 <- mean(res$eff1)
-  peff2 <- mean(res$eff2)
-  
-  pse1 <- mean(res$se1^2)
-  pse2 <- mean(res$se2^2)
-  
-  btwvar1 <- var(res$eff1)
-  btwvar2 <- var(res$eff2)
-  
-  totvar1 <- pse1 + (1 + 1/m) * btwvar1
-  totvar2 <- pse2 + (1 + 1/m) * btwvar2
-  
-  pse1 <- sqrt(totvar1)
-  pse2 <- sqrt(totvar2)
-  
-  pci1 <- peff1 + c(-1, 1) * qnorm(0.975) * pse1
-  pci2 <- peff2 + c(-1, 1) * qnorm(0.975) * pse2
-  
-  bias1 <- peff1 - true1
-  bias2 <- peff2 - true2
-  
-  cover1 <- mean(res$ci.lb1 <= true1 & res$ci.ub1 >= true1)
-  cover2 <- mean(res$ci.lb2 <= true2 & res$ci.ub2 >= true2)
-  
-  return(data.frame(
-    method = method_name,
-    bias_CR = bias1,
-    bias_SR = bias2,
-    cover_CR = cover1,
-    cover_SR = cover2,
-    pci_lb_CR = pci1[1],
-    pci_ub_CR = pci1[2],
-    pci_lb_SR = pci2[1],
-    pci_ub_SR = pci2[2]
-  ))
-}
-
-true1 <- mean(b3 + RTher[, 1])
-true2 <- mean(b3 + RTher[, 2])
-
-results_all <- rbind(
-  evaluate_method(resuni, true1, true2, "Uniform"),
-  evaluate_method(resnorm, true1, true2, "Normal(0,0)"),
-  evaluate_method(resnorm2, true1, true2, "Normal(3,3)"),
-  evaluate_method(resnorm3, true1, true2, "Normal(-3,-3)"),
-  evaluate_method(restmvn, true1, true2, "TMVN")
-)
-
-print(results_all)
-
-resuni$method <- "Uniform"
-resnorm$method <- "Normal(0,0)"
-resnorm2$method <- "Normal(3,3)"
-resnorm3$method <- "Normal(-3,-3)"
-restmvn$method <- "TMVN"
-
-res_all <- rbind(resuni, resnorm, resnorm2, resnorm3, restmvn)
-
-# CR bias distribution
-ggplot(res_all, aes(x = eff1 - true1, fill = method)) +
-  geom_density(alpha = 0.4) +
-  labs(title = "Bias Distribution for CR", x = "Bias", y = "Density") +
-  theme_minimal()
-
-# CR coverage 
-
-library(tidyr)
-
-results_all_long <- results_all %>%
-  select(method, cover_CR, cover_SR) %>%
-  pivot_longer(cols = c(cover_CR, cover_SR), names_to = "Outcome", values_to = "Coverage")
-
-ggplot(results_all_long, aes(x = method, y = Coverage, fill = Outcome)) +
-  geom_bar(stat = "identity", position = "dodge") +
-  labs(title = "Coverage Probability by Method", x = "Method", y = "Coverage") +
-  geom_hline(yintercept = 0.95, linetype = "dashed", color = "red") +
-  theme_minimal()
-

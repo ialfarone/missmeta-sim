@@ -140,6 +140,8 @@ genimp.pmm = function(df,
                   sdSR = NULL,
                   #                  impSECR = NULL,
                   #                  impSESR = NULL,
+                  meantmv = NULL, 
+                  sigmatmv = NULL, 
                   lower = lower, 
                   upper = upper, 
                   imprho = NULL,
@@ -169,15 +171,10 @@ genimp.pmm = function(df,
       
     } else if (distribution == "tmvn") {
       
- #     muObs = colMeans(cbind(dfi$EstCR, dfi$EstSR), na.rm = TRUE)
-   # SigmaObs = cov(cbind(dfi$EstCR, dfi$EstSR), use = "complete.obs")
-
-      SigmaObs = matrix(c(10, 7, 7, 10), 2, 2)
-      
-       imputed <- rtmvnorm(
+      imputed = rtmvnorm(
         n = sum(is.na(dfi$Cor.ws)),
-        mean = c(0,0),
-        sigma = SigmaObs,
+        mean = meantmv,
+        sigma = sigmatmv,
         lower = lower,
         upper = upper
       )
@@ -287,21 +284,28 @@ resnorm3
 #############################
 ##### Truncate MVNormal #####
 #############################
+lower = c(-Inf, -Inf) # for now simply multivariate
+upper = c(Inf, Inf)
 
-lower = c(-10, -10)
-upper = c(5, 5)
+# for now from the data, but this does not hold for MNAR  
 
+meantmv = colMeans(cbind(dmcar$EstCR, dmcar$EstSR), na.rm = TRUE)
+sigmatmv = cov(cbind(dmcar$EstCR, dmcar$EstSR), use = "complete.obs")
 
 restmvn = genimp.pmm(
-  df = dmnar,
+  df = dmcar,
   distribution = "tmvn",
-  iter = 100,
-  imprho = 0.7,
-  scaleSE = 1.5,
+  iter = 10,
   lower = lower,
-  upper = upper
+  upper = upper, 
+  meantmv = meantmv,
+  sigmatmv = sigmatmv, 
+  imprho = 0.7,
+  scaleSE = 1.5
 )
+
 restmvn
+
 
 ################################################################################
 # Calculate bias and coverage and compare
