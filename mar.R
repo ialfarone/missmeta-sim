@@ -106,15 +106,7 @@ sub$likObs <- plogis(beta0 + beta1 * (sub$meanA - 18))
 
 M0 = rbinom(S, size = 1, prob = sub$likObs)
 dmar = dat
-
-for (i in 1:S) {
-  if (M0[i] == 0) {
-    dmar$EstCR[dat$Study == i] = NA
-    dmar$SECR[dat$Study == i] = NA
-    dmar$Cor.ws[dat$Study == i] = NA
-    
-  }
-}
+dmar[M0 == 0, c("EstCR", "SECR", "Cor.ws")] = NA
 
 head(dmar)
 
