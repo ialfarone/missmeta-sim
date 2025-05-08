@@ -211,7 +211,9 @@ genimp = function(df,
 
 # Occhio che https://cran.r-project.org/web/packages/metavcov/metavcov.pdf 
 # incorpora gia' MI con multivariate meta analisi. Questo puo' dare un po'
-# di solidita' e evidence 
+# di solidita' e evidence.
+# See also: Assessing the Sensitivity of Meta-analysis to Selection Bias: A Multiple Imputation
+# Approach Author(s): James Carpenter, Gerta Rücker and Guido Schwarzer
 
 #################################
 #### Multivariate with MCAR #####

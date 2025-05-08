@@ -90,22 +90,19 @@ summary(mv.c)
 
 ## Missing Not At Random ####
 
-beta0 = -1.5     
-beta1 = 1.5  # lower EstCR -> lower prob of CR being observed
+target = 0.2  
+beta1 = 2
 
-dmnar = dat
+beta0 = uniroot(function(b0) mean(plogis(b0 + beta1 * dat$EstCR)) -
+                   (1 - target),
+                 c(-20, 20))$root
 
-likObs = 1 / (1 + exp(-(beta0 + beta1 * dmnar$EstCR)))
+prob_obs = plogis(beta0 + beta1 * dat$EstCR)
 
-M0 <- rbinom(S, size = 1, prob = likObs)
+dmnar    = dat
+M0       = rbinom(nrow(dat), 1, prob_obs)
+dmnar[M0 == 0, c("EstCR", "SECR", "Cor.ws")] = NA
 
-for (i in 1:S) {
-  if (M0[i] == 0) {
-    dmnar$EstCR[dat$Study == i] = NA
-    dmnar$SECR[dat$Study == i] = NA
-    dmnar$Cor.ws[dat$Study == i] = NA
-  }
-}
 head(dmnar)
 sum(is.na(dmnar$EstCR))
 
@@ -127,7 +124,7 @@ summary(mv.m)
 
 
 # Random sample generator for continuous missing data for MNAR ####
-genimp.pmm = function(df,
+genimp.mnar = function(df,
                   distribution = c("uniform", "normal", "tmvn"),
                   iter = NULL,
                   minCR = NULL,
@@ -221,10 +218,10 @@ genimp.pmm = function(df,
   do.call(rbind, results)
 }
 
-resuni = genimp.pmm(
+resuni = genimp.mnar(
   df = dmnar,
   distribution = "uniform",
-  iter = 100,
+  iter = 10,
   minCR = -max(d$CR),
   maxCR = max(d$CR),
   minSR = -max(d$SR),
@@ -236,10 +233,10 @@ resuni = genimp.pmm(
 )
 resuni
 
-resnorm = genimp.pmm(
+resnorm = genimp.mnar(
   df = dmnar,
   distribution = "normal",
-  iter = 100,
+  iter = 10,
   meanCR = 0,
   meanSR = 0,
   sdCR = 10,
@@ -251,10 +248,10 @@ resnorm = genimp.pmm(
 )
 resnorm
 
-resnorm2 = genimp.pmm(
+resnorm2 = genimp.mnar(
   df = dmnar,
   distribution = "normal",
-  iter = 100,
+  iter = 10,
   meanCR = 3,
   meanSR = 3,
   sdCR = 10,
@@ -266,10 +263,10 @@ resnorm2 = genimp.pmm(
 )
 resnorm2
 
-resnorm3 = genimp.pmm(
+resnorm3 = genimp.mnar(
   df = dmnar,
   distribution = "normal",
-  iter = 100,
+  iter = 10,
   meanCR = -3,
   meanSR = -3,
   sdCR = 10,
@@ -289,11 +286,11 @@ upper = c(Inf, Inf)
 
 # for now from the data, but this does not hold for MNAR  
 
-meantmv = colMeans(cbind(dmcar$EstCR, dmcar$EstSR), na.rm = TRUE)
-sigmatmv = cov(cbind(dmcar$EstCR, dmcar$EstSR), use = "complete.obs")
+meantmv = colMeans(cbind(dmnar$EstCR, dmnar$EstSR), na.rm = TRUE)
+sigmatmv = cov(cbind(dmnar$EstCR, dmnar$EstSR), use = "complete.obs")
 
-restmvn = genimp.pmm(
-  df = dmcar,
+restmvn = genimp.mnar(
+  df = dmnar,
   distribution = "tmvn",
   iter = 10,
   lower = lower,
