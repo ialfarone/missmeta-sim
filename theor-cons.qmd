@@ -1,0 +1,59 @@
+---
+title: "Theoretical aspects"
+format: html
+editor: visual
+---
+
+## Rubin's Rules for determining an uncertainty range
+
+See equations from 2.16 here <https://stefvanbuuren.name/fimd/sec-whyandwhen.html#eq:poolQ>
+
+Pooled point estimate:\
+$$
+\bar{\mathbf{Q}} = \frac{1}{m} \sum_{k=1}^m \mathbf{Q}_k
+$$
+
+Pooled within-imputation variance:\
+$$
+\bar{\mathbf{U}} = \frac{1}{m} \sum_{k=1}^m \mathbf{U}_k
+$$
+
+Between-imputation variance:\
+$$
+\mathbf{B} = \frac{1}{m - 1} \sum_{k=1}^m (\mathbf{Q}_k - \bar{\mathbf{Q}})(\mathbf{Q}_k - \bar{\mathbf{Q}})^\top
+$$ Total variance (Rubin's rule):\
+$$
+\mathbf{T} = \bar{\mathbf{U}} + \left(1 + \frac{1}{m} \right) \mathbf{B}
+$$
+
+Marginal standard error for parameter ( j ):\
+$$
+\text{se}(\bar{Q}_j) = \sqrt{T_{jj}}
+$$
+
+Degrees of freedom (Barnard–Rubin adjustment):\
+$$
+\nu_j = (m - 1) \left( 1 + \frac{\bar{U}_{jj}}{(1 + \frac{1}{m}) B_{jj}} \right)^2
+$$\
+https://doi.org/10.1093/biomet/86.4.948
+
+The formula is introduced in the paper in a slightly different way, 
+first they derive the proportion of variance due to the imputations
+
+$$
+\lambda = \frac{(1 + \frac{1}{m}) B}{T}, \quad \text{where} \quad T = \bar{U} + \left(1 + \frac{1}{m} \right) B
+$$
+
+Then, they show that for a single parameter, the reference distribution of the pooled estimate can be approximated by a t-distribution with:
+
+$$
+\nu = \frac{m - 1}{\lambda^2}
+$$
+
+Substituting the expression for $\lambda$ we get the formula above.
+
+95% confidence interval for parameter ( j ):\
+$$
+\bar{Q}_j \pm t_{\nu_j,\,0.975} \cdot \text{se}(\bar{Q}_j)
+$$\
+https://amices.org/mice/reference/pool.html

@@ -1,20 +1,26 @@
 Meta-analyses in psychology often pool outcomes measured using different instruments, with many studies reporting only a subset of these outcomes. 
 Such instruments typically measure the same underlying construct and are statistically correlated, making multivariate meta-analysis a methodologically appropriate choice. 
 However, missing outcomes raise concerns about bias and inference validity, particularly when the mechanism driving missingness is unknown. 
-While some outcomes may be Missing Completely at Random (MCAR) or Missing at Random (MAR), a more complex scenario arises when outcomes are Missing Not At Random (MNAR), 
-that is, when the probability of non-reporting depends on the unobserved values themselves.
+While some outcomes may be Missing Completely at Random (MCAR) or Missing at Random (MAR), a more complex scenario arises when outcomes are Missing Not At Random (MNAR).
 
-We explore outcome-level missingness in multivariate meta-analysis through a series of simulation studies and an application to real psychological data. 
-A range of imputation strategies is evaluated under MCAR, MAR, and MNAR assumptions, including uniform, univariate, multivariate, and truncated normal imputations with variance inflation.
-To account for uncertainty about the true missingness mechanism, we adopt a multiverse framework for sensitivity analysis, varying assumptions and model specifications to assess 
-the robustness of the results.
+Missing study-level summary statistics are handled by repeated stochastic single imputation: in each Monte-Carlo replicate every absent effect estimate, standard error, 
+and within-study correlation is replaced by a single random draw from one of four donor distributions—uniform, univariate normal, multivariate normal, 
+or truncated normal—selected to represent a spectrum of plausible data-generating processes while preserving cross-outcome dependence where appropriate.
+These imputations are embedded in a multiverse sensitivity design that systematically varies both the assumed missingness mechanism (MCAR, MAR, MNAR) 
+and the meta-analytic specification across thousands of replicates.
 
-This approach offers several strengths. It preserves the correlation structure across outcomes, avoiding artificial inflation or deflation of heterogeneity. 
-It flexibly accommodates various missingness scenarios without relying on computationally intensive methods such as MCMC. 
-It supports transparent inference by explicitly mapping how conclusions vary under different assumptions. 
-Finally, it is easily implementable with standard software and provides fast results.
+The multiverse approach offers several advantages. It retains the observed correlation structure, prevents artificial distortion of heterogeneity, 
+remains computationally lightweight, and makes the dependence of inferences on unverifiable assumptions fully transparent. 
+Simulations show that misspecifying the mechanism (e.g., analysing MNAR data as MAR) yields biased pooled effects and under-coverage, 
+whereas structurally coherent imputation models improve inferential accuracy. We conclude with practical recommendations and reproducible code for conducting 
+multiverse sensitivity analyses in psychological MVMA when outcome-level missingness and uncertainty about its mechanism are present.
 
-Our findings show that assuming MAR when the data may be MNAR can lead to biased estimates and undercoverage. 
-In contrast, structurally coherent and flexible imputation strategies that incorporate joint distributions and sensitivity parameters improve inferential validity. 
-We conclude with practical recommendations and code for conducting multiverse sensitivity analysis in psychological meta-analysis when outcome-level missingness is present and 
-the missingness mechanism is uncertain.
+
+
+
+
+
+
+
+
+

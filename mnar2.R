@@ -94,8 +94,8 @@ target = 0.2
 beta1 = 2
 
 beta0 = uniroot(function(b0) mean(plogis(b0 + beta1 * dat$EstCR)) -
-                   (1 - target),
-                 c(-20, 20))$root
+                  (1 - target),
+                c(-20, 20))$root
 
 prob_obs = plogis(beta0 + beta1 * dat$EstCR)
 
@@ -116,8 +116,8 @@ ggplot(dmnar, aes(x = dat$EstCR, fill = is.na(EstCR))) +
 
 theta.m = cbind(dmnar$EstCR, dmnar$EstSR)
 Sigma.m = cbind(dmnar$SECR^2,
-              cor2cov(dmnar$SECR, dmnar$SESR, dmnar$Cor.ws),
-              dmnar$SESR^2)
+                cor2cov(dmnar$SECR, dmnar$SESR, dmnar$Cor.ws),
+                dmnar$SESR^2)
 
 mv.m = mixmeta(theta.m, Sigma.m, method = "reml")
 summary(mv.m)
@@ -125,24 +125,24 @@ summary(mv.m)
 
 # Random sample generator for continuous missing data for MNAR ####
 genimp.mnar = function(df,
-                  distribution = c("uniform", "normal", "tmvn"),
-                  iter = NULL,
-                  minCR = NULL,
-                  maxCR = NULL,
-                  minSR = NULL,
-                  maxSR = NULL,
-                  meanCR = NULL,
-                  meanSR = NULL,
-                  sdCR = NULL,
-                  sdSR = NULL,
-                  #                  impSECR = NULL,
-                  #                  impSESR = NULL,
-                  meantmv = NULL, 
-                  sigmatmv = NULL, 
-                  lower = lower, 
-                  upper = upper, 
-                  imprho = NULL,
-                  scaleSE = NULL) {
+                       distribution = c("uniform", "normal", "tmvn"),
+                       iter = NULL,
+                       minCR = NULL,
+                       maxCR = NULL,
+                       minSR = NULL,
+                       maxSR = NULL,
+                       meanCR = NULL,
+                       meanSR = NULL,
+                       sdCR = NULL,
+                       sdSR = NULL,
+                       #                  impSECR = NULL,
+                       #                  impSESR = NULL,
+                       meantmv = NULL, 
+                       sigmatmv = NULL, 
+                       lower = lower, 
+                       upper = upper, 
+                       imprho = NULL,
+                       scaleSE = NULL) {
   distribution = match.arg(distribution)
   results = vector(mode = "list", length = iter)
   
@@ -208,7 +208,6 @@ genimp.mnar = function(df,
       eff2 = mv$coefficients[2],
       se1 = sqrt(mv$vcov[1, 1]),
       se2 = sqrt(mv$vcov[2, 2]),
-      cov = mv$vcov[1, 2],
       ci.lb1 = ci[1, 1],
       ci.ub1 = ci[1, 2],
       ci.lb2 = ci[2, 1],
@@ -304,38 +303,36 @@ restmvn = genimp.mnar(
 
 restmvn
 
+
 ################################################################################
+# Calculate bias and coverage and compare
 
 evaluate_method <- function(res, true1, true2, method_name) {
   m <- nrow(res)
   
-  Q_mat <- cbind(res$eff1, res$eff2)
-  Q_bar <- colMeans(Q_mat)                     
+  peff1 <- mean(res$eff1)
+  peff2 <- mean(res$eff2)
   
-  B <- cov(Q_mat)                              
+  pse1 <- mean(res$se1^2)
+  pse2 <- mean(res$se2^2)
   
-  U_list <- lapply(1:m, function(i) {
-    matrix(c(res$se1[i]^2, res$cov[i], 
-             res$cov[i], res$se2[i]^2), 
-           nrow = 2)
-  })
+  btwvar1 <- var(res$eff1)
+  btwvar2 <- var(res$eff2)
   
-  U_bar <- Reduce("+", U_list) / m             
+  totvar1 <- pse1 + (1 + 1/m) * btwvar1
+  totvar2 <- pse2 + (1 + 1/m) * btwvar2
   
-  Tmat <- U_bar + (1 + 1/m) * B # total pooled variance (now I incorporate also the covariance)
+  pse1 <- sqrt(totvar1)
+  pse2 <- sqrt(totvar2)
   
-  se <- sqrt(diag(Tmat))
+  pci1 <- peff1 + c(-1, 1) * qnorm(0.975) * pse1
+  pci2 <- peff2 + c(-1, 1) * qnorm(0.975) * pse2
   
-  df <- (m - 1) * (1 + diag(U_bar) / ((1 + 1/m) * diag(B)))^2
+  bias1 <- peff1 - true1
+  bias2 <- peff2 - true2
   
-  ci1 <- Q_bar[1] + c(-1, 1) * qt(0.975, df[1]) * se[1]
-  ci2 <- Q_bar[2] + c(-1, 1) * qt(0.975, df[2]) * se[2]
-  
-  bias1 <- Q_bar[1] - true1
-  bias2 <- Q_bar[2] - true2
-  
-  cover1 <- as.numeric(ci1[1] <= true1 && true1 <= ci1[2])
-  cover2 <- as.numeric(ci2[1] <= true2 && true2 <= ci2[2])
+  cover1 <- mean(res$ci.lb1 <= true1 & res$ci.ub1 >= true1)
+  cover2 <- mean(res$ci.lb2 <= true2 & res$ci.ub2 >= true2)
   
   return(data.frame(
     method = method_name,
@@ -343,10 +340,10 @@ evaluate_method <- function(res, true1, true2, method_name) {
     bias_SR = bias2,
     cover_CR = cover1,
     cover_SR = cover2,
-    pci_lb_CR = ci1[1],
-    pci_ub_CR = ci1[2],
-    pci_lb_SR = ci2[1],
-    pci_ub_SR = ci2[2]
+    pci_lb_CR = pci1[1],
+    pci_ub_CR = pci1[2],
+    pci_lb_SR = pci2[1],
+    pci_ub_SR = pci2[2]
   ))
 }
 
