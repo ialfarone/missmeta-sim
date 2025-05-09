@@ -216,11 +216,7 @@ resuni = genimp.mnar(
 )
 resuni
 
-library(ggplot2)
-library(dplyr)
-
-# Assuming `res_delta` is the output of your updated `genimp.mnar()` function
-summary_df <- resuni %>%
+sum.delta <- resuni %>%
   group_by(delta) %>%
   summarise(
     eff1 = mean(eff1),
@@ -231,39 +227,38 @@ summary_df <- resuni %>%
     ci.ub2 = mean(ci.ub2)
   )
 
-ggplot(summary_df, aes(x = delta)) +
+ggplot(sum.delta, aes(x = delta)) +
   geom_line(aes(y = eff1), color = "#1f77b4") +
   geom_ribbon(aes(ymin = ci.lb1, ymax = ci.ub1), alpha = 0.2, fill = "#1f77b4") +
-  labs(title = "Pooled Estimate and CI for CR across Delta",
-       x = expression(delta),
+  labs(x = expression(delta),
        y = "Pooled Estimate (CR)") +
   theme_minimal()
 
 
-summary_df <- summary_df %>%
+sum.delta2 = sum.delta %>%
   mutate(bias_eff1 = eff1 - true1)
 
-ggplot(summary_df, aes(x = delta, y = bias_eff1)) +
+ggplot(sum.delta2, aes(x = delta, y = bias_eff1)) +
   geom_line(color = "#d62728") +
   geom_hline(yintercept = 0, linetype = "dashed", color = "grey50") +
-  labs(title = "Bias in CR Estimate across Delta",
-       x = expression(delta),
+  labs(x = expression(delta),
        y = "Bias (Estimate - True Value)") +
   theme_minimal()
 
-summary_df <- summary_df %>%
+sum.delta3 = sum.delta2 %>%
   mutate(coverage = as.numeric(ci.lb1 <= true1 & true1 <= ci.ub1))
 
-ggplot(summary_df, aes(x = delta, y = coverage)) +
+ggplot(sum.delta3, aes(x = delta, y = coverage)) +
   geom_point(size = 3) +
   geom_line() +
   geom_hline(yintercept = 1, linetype = "dashed", color = "darkgreen") +
-  labs(title = "Coverage of 95% CI for CR across Delta",
-       x = expression(delta),
+  labs(x = expression(delta),
        y = "Coverage") +
   theme_minimal()
 
-
+################################################################################
+# IA : FIX!
+################################################################################
 
 resnorm = genimp.mnar(
   df = dmnar,
@@ -274,6 +269,7 @@ resnorm = genimp.mnar(
   sdCR = 10,
   sdSR = 12,
   imprho = 0.7,
+  delta = seq(-3, 3, by = 1.5),
   scaleSE = 1.5
 )
 resnorm
@@ -299,9 +295,8 @@ resnorm3 = genimp.mnar(
   meanSR = -3,
   sdCR = 10,
   sdSR = 12,
-  #  impSECR = 100,
-  #  impSESR = 100,
   imprho = 0.7,
+  delta = seq(-3, 3, by = 1.5),
   scaleSE = 1.5
 )
 resnorm3
@@ -327,6 +322,7 @@ restmvn = genimp.mnar(
   meantmv = meantmv,
   sigmatmv = sigmatmv, 
   imprho = 0.7,
+  delta = seq(-3, 3, by = 1.5),
   scaleSE = 1.5
 )
 
