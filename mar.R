@@ -331,9 +331,9 @@ sum.meth = function(res, true1, true2, method_name) {
   cover2 = as.numeric(ci2[1] <= true2 && true2 <= ci2[2])
   
   return(data.frame(
+    method = method_name,
     est_CR = Q_bar[1],
     est_SR = Q_bar[2],
-    method = method_name,
     bias_CR = bias1,
     bias_SR = bias2,
     cover_CR = cover1,
