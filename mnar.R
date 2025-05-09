@@ -316,6 +316,8 @@ sum.meth = function(res, true1, true2, method_name) {
   
   return(data.frame(
     method = method_name,
+    est_CR = Q_bar[1],
+    est_SR = Q_bar[2],
     bias_CR = bias1,
     bias_SR = bias2,
     cover_CR = cover1,
