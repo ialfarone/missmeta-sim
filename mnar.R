@@ -369,6 +369,7 @@ ggplot(resultslong, aes(x = method, y = Coverage, fill = Outcome)) +
 
 ggplot(results, aes(x = method)) +
   geom_linerange(aes(ymin = pci_lb_CR, ymax = pci_ub_CR), linewidth = 1.5) +
+  geom_point(aes(y = est_CR), color = "black", size = 3) +
   geom_hline(yintercept = 3, linetype = "dashed", color = "red") +
   coord_flip() +
   labs(
