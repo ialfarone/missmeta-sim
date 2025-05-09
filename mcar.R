@@ -4,7 +4,7 @@ library(systemfit)
 library(dplyr)
 library(tmvtnorm)
 
-S = 1000
+S = 100
 N = 1000
 
 Mu = c(0, 0)
@@ -72,7 +72,9 @@ for (s in 1:S) {
 dat = do.call(rbind, dat)
 head(dat)
 
+##################################
 ## Multivariate meta-analysis ####
+##################################
 
 theta = cbind(dat$EstCR, dat$EstSR)
 cor2cov = function(sd1, sd2, rho) {
@@ -85,7 +87,9 @@ Sigma = cbind(dat$SECR^2,
 mv.c = mixmeta(theta, Sigma, method = "reml")
 summary(mv.c)
 
+#######################
 # Generate missing ####
+#######################
 
 ## Missing Completely At Random ####
 
@@ -116,24 +120,9 @@ ggplot(dmcar, aes(x = dat$EstCR, fill = is.na(EstCR))) +
   theme_minimal()
 
 # Random sample generator for continuous missing data ####
-genimp = function(df,
-                  distribution = c("uniform", "normal","tmvn"),
-                  iter = NULL,
-                  minCR = NULL,
-                  maxCR = NULL,
-                  minSR = NULL,
-                  maxSR = NULL,
-                  meanCR = NULL,
-                  meanSR = NULL,
-                  sdCR = NULL,
-                  sdSR = NULL,
-                  meantmv = NULL, 
-                  sigmatmv = NULL, 
-                  lower = NULL, 
-                  upper = NULL,
-#                  impSECR = NULL,
-#                  impSESR = NULL,
-                  imprho = NULL) {
+genimp = function(df, distribution = c("uniform", "normal","tmvn"), iter,
+                  minCR, maxCR, minSR, maxSR, meanCR, meanSR, sdCR, sdSR,
+                  meantmv, sigmatmv, lower, upper, imprho) {
   distribution = match.arg(distribution)
   results = vector(mode = "list", length = iter)
   
@@ -156,7 +145,7 @@ genimp = function(df,
       
       impCR = rnorm(NmissCR, mean = meanCR, sd = sdCR)
       impSR = rnorm(NmissSR, mean = meanSR, sd = sdSR)
-    
+      
     } else if (distribution == "tmvn") {
       
       imputed = rtmvnorm(
@@ -171,11 +160,8 @@ genimp = function(df,
       impSR = imputed[, 2]
     }
     
-    
     dfi$EstCR[is.na(dfi$EstCR)] = sample(impCR, NmissCR, replace = F)
     dfi$EstSR[is.na(dfi$EstSR)] = sample(impSR, NmissSR, replace = F)
-#    dmcar$SECR[is.na(dmcar$SECR)] = impSECR
-#    dmcar$SESR[is.na(dmcar$SESR)] = impSESR
     dfi$Cor.ws[is.na(dfi$Cor.ws)] = imprho
     
     impSECR = rnorm(NmissCR, mean(dfi$SECR, na.rm = T), sd(dfi$SECR, na.rm = T)) 
@@ -199,6 +185,7 @@ genimp = function(df,
       eff2 = mv$coefficients[2],
       se1 = sqrt(mv$vcov[1, 1]),
       se2 = sqrt(mv$vcov[2, 2]),
+      cov = mv$vcov[1, 2],
       ci.lb1 = ci[1, 1],
       ci.ub1 = ci[1, 2],
       ci.lb2 = ci[2, 1],
@@ -238,6 +225,7 @@ NmissSR = sum(is.na(dmcar$EstSR))
 impCR = runif(NmissCR, min = -max(d$CR), max = max(d$CR))
 impSR = runif(NmissSR, min = -max(d$SR), max = max(d$SR))
 
+# plot for inspection
 plot(impCR)
 plot(impSR)
 
@@ -253,52 +241,6 @@ resuni = genimp(
 )
 
 resuni
-
-## Bias and Coverage from Rubin's rules
-
-### Rubin (IA: write formulae somewhere)
-m = nrow(resuni)
-
-peff1 = mean(resuni$eff1) # pooled effects
-peff2 = mean(resuni$eff2)
-
-pse1 = mean(resuni$se1^2)
-pse2 = mean(resuni$se2^2)
-
-btwvar1 = var(resuni$eff1)
-btwvar2 = var(resuni$eff2)
-
-totvar1 = pse1 + (1 + 1/m) * btwvar1
-totvar2 = pse2 + (1 + 1/m) * btwvar2
-
-pse1 = sqrt(totvar1) # se pooled
-pse2 = sqrt(totvar2)
-
-pci1 = peff1 + c(-1, 1) * qnorm(0.975) * pse1
-pci2 = peff2 + c(-1, 1) * qnorm(0.975) * pse2
-
-#### bias and coverage
-
-true1 = mean(b3 + RTher[, 1])
-true2 = mean(b3 + RTher[, 2])
-
-bias1 = mean(resuni$eff1) - true1
-bias2 = mean(resuni$eff2) - true2
-
-cover1 = mean(resuni$ci.lb1 <= true1 & resuni$ci.ub1 >= true1)
-cover2 = mean(resuni$ci.lb2 <= true2 & resuni$ci.ub2 >= true2)
-
-bias1
-bias2
-
-cover1
-cover2
-
-pci1
-pci2
-
-hist(resuni$eff1 - true1, breaks = 50, main = "Bias Distribution (CR)", xlab = "Bias")
-abline(v = bias1, col = "red", lwd = 2)
 
 ################
 #### Normal ####
@@ -323,61 +265,12 @@ resnorm = genimp(
 )
 resnorm
 
-## Bias and Coverage from Rubin's rules
-
-### Rubin (IA: write formulae somewhere)
-m = nrow(resnorm)
-
-peff1 = mean(resnorm$eff1) # pooled effects
-peff2 = mean(resnorm$eff2)
-
-pse1 = mean(resnorm$se1^2)
-pse2 = mean(resnorm$se2^2)
-
-btwvar1 = var(resnorm$eff1)
-btwvar2 = var(resnorm$eff2)
-
-totvar1 = pse1 + (1 + 1/m) * btwvar1
-totvar2 = pse2 + (1 + 1/m) * btwvar2
-
-pse1 = sqrt(totvar1) # se pooled
-pse2 = sqrt(totvar2)
-
-pci1 = peff1 + c(-1, 1) * qnorm(0.975) * pse1
-pci2 = peff2 + c(-1, 1) * qnorm(0.975) * pse2
-
-#### bias and coverage
-
-true1 = mean(b3 + RTher[, 1])
-true2 = mean(b3 + RTher[, 2])
-
-bias1 = mean(resnorm$eff1) - true1
-bias2 = mean(resnorm$eff2) - true2
-
-cover1 = mean(resnorm$ci.lb1 <= true1 & resnorm$ci.ub1 >= true1)
-cover2 = mean(resnorm$ci.lb2 <= true2 & resnorm$ci.ub2 >= true2)
-
-bias1
-bias2
-
-cover1
-cover2
-
-pci1
-pci2
-
-hist(resnorm$eff1 - true1, breaks = 50, main = "Bias Distribution (CR)", xlab = "Bias")
-abline(v = bias1, col = "red", lwd = 2)
-
-
 resnorm2 = genimp(
   df = dmcar,
   distribution = "normal",
   iter = 20,
   meanCR = 3, meanSR = 3,
   sdCR = 10, sdSR = 12,
-  #  impSECR = 100,
-  #  impSESR = 100,
   imprho = 0.7
 )
 resnorm2
@@ -416,3 +309,105 @@ restmvn = genimp(
 )
 
 restmvn
+
+#########################
+# Summarize results #####
+#########################
+
+sum.meth = function(res, true1, true2, method_name) {
+  m = nrow(res)
+  
+  Q_mat = cbind(res$eff1, res$eff2)
+  Q_bar = colMeans(Q_mat)                     
+  
+  B = cov(Q_mat)                              
+  
+  U_list = lapply(1:m, function(i) {
+    matrix(c(res$se1[i]^2, res$cov[i], 
+             res$cov[i], res$se2[i]^2), 
+           nrow = 2)
+  })
+  
+  U_bar = Reduce("+", U_list) / m             
+  
+  Tmat = U_bar + (1 + 1/m) * B # total pooled variance (now I incorporate also the covariance)
+  
+  se = sqrt(diag(Tmat))
+  
+  df = (m - 1) * (1 + diag(U_bar) / ((1 + 1/m) * diag(B)))^2
+  
+  ci1 = Q_bar[1] + c(-1, 1) * qt(0.975, df[1]) * se[1]
+  ci2 = Q_bar[2] + c(-1, 1) * qt(0.975, df[2]) * se[2]
+  
+  bias1 = Q_bar[1] - true1
+  bias2 = Q_bar[2] - true2
+  
+  cover1 = as.numeric(ci1[1] <= true1 && true1 <= ci1[2])
+  cover2 = as.numeric(ci2[1] <= true2 && true2 <= ci2[2])
+  
+  return(data.frame(
+    method = method_name,
+    est_CR = Q_bar[1],
+    est_SR = Q_bar[2],
+    bias_CR = bias1,
+    bias_SR = bias2,
+    cover_CR = cover1,
+    cover_SR = cover2,
+    pci_lb_CR = ci1[1],
+    pci_ub_CR = ci1[2],
+    pci_lb_SR = ci2[1],
+    pci_ub_SR = ci2[2]
+  ))
+}
+
+true1 = mean(b3 + RTher[, 1])
+true2 = mean(b3 + RTher[, 2])
+
+results = rbind(
+  sum.meth(resuni, true1, true2, "Uniform"),
+  sum.meth(resnorm, true1, true2, "Normal(0,0)"),
+  sum.meth(resnorm2, true1, true2, "Normal(3,3)"),
+  sum.meth(resnorm3, true1, true2, "Normal(-3,-3)"),
+  sum.meth(restmvn, true1, true2, "TMVN")
+)
+
+print(results)
+
+resuni$method = "Uniform"
+resnorm$method = "Normal(0,0)"
+resnorm2$method = "Normal(3,3)"
+resnorm3$method = "Normal(-3,-3)"
+restmvn$method = "TMVN"
+
+results.table = rbind(resuni, resnorm, resnorm2, resnorm3, restmvn)
+
+# CR bias distribution
+ggplot(results.table, aes(x = eff1 - true1, fill = method)) +
+  geom_density(alpha = 0.4) +
+  labs(title = "Bias Distribution for CR", x = "Bias", y = "Density") +
+  theme_minimal()
+
+# CR coverage 
+library(tidyr)
+
+resultslong = results %>%
+  select(method, cover_CR, cover_SR) %>%
+  pivot_longer(cols = c(cover_CR, cover_SR), names_to = "Outcome", values_to = "Coverage")
+
+ggplot(resultslong, aes(x = method, y = Coverage, fill = Outcome)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Coverage Probability by Method", x = "Method", y = "Coverage") +
+  geom_hline(yintercept = 0.95, linetype = "dashed", color = "red") +
+  theme_minimal()
+
+ggplot(results, aes(x = method)) +
+  geom_linerange(aes(ymin = pci_lb_CR, ymax = pci_ub_CR), linewidth = 1.5) +
+  geom_point(aes(y = est_CR), color = "black", size = 3) +
+  geom_hline(yintercept = 3, linetype = "dashed", color = "red") +
+  coord_flip() +
+  labs(
+    title = "Uncertainty Intervals for CR",
+    x = "Method", y = "CR Interval"
+  ) +
+  theme_minimal()
+
