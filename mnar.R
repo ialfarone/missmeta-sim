@@ -52,13 +52,13 @@ d = do.call(rbind, data)
 dat = vector(mode = "list", length = S)
 
 for (s in 1:S) {
-  Sn <- d[d$Study == s, ]
+  Sn = d[d$Study == s, ]
   
-  m1 <- CR ~ Age + Sex + Ther
-  m2 <- SR ~ Age + Sex + Ther
+  m1 = CR ~ Age + Sex + Ther
+  m2 = SR ~ Age + Sex + Ther
   
-  fitsur <- systemfit(list(CR = m1, SR = m2), "SUR", data = Sn)
-  sum <- summary(fitsur)
+  fitsur = systemfit(list(CR = m1, SR = m2), "SUR", data = Sn)
+  sum = summary(fitsur)
   
   dat[[s]] = data.frame(
     Study = s,
@@ -124,25 +124,9 @@ summary(mv.m)
 
 
 # Random sample generator for continuous missing data for MNAR ####
-genimp.mnar = function(df,
-                  distribution = c("uniform", "normal", "tmvn"),
-                  iter = NULL,
-                  minCR = NULL,
-                  maxCR = NULL,
-                  minSR = NULL,
-                  maxSR = NULL,
-                  meanCR = NULL,
-                  meanSR = NULL,
-                  sdCR = NULL,
-                  sdSR = NULL,
-                  #                  impSECR = NULL,
-                  #                  impSESR = NULL,
-                  meantmv = NULL, 
-                  sigmatmv = NULL, 
-                  lower = lower, 
-                  upper = upper, 
-                  imprho = NULL,
-                  scaleSE = NULL) {
+genimp.mnar = function(df, distribution = c("uniform", "normal", "tmvn"),
+                  iter, minCR, maxCR, minSR, maxSR, meanCR, meanSR, sdCR, sdSR,
+                  meantmv, sigmatmv, lower, upper, imprho, scaleSE) {
   distribution = match.arg(distribution)
   results = vector(mode = "list", length = iter)
   
@@ -183,8 +167,6 @@ genimp.mnar = function(df,
     
     dfi$EstCR[is.na(dfi$EstCR)] = sample(impCR, NmissCR, replace = F)
     dfi$EstSR[is.na(dfi$EstSR)] = sample(impSR, NmissSR, replace = F)
-    #    dmcar$SECR[is.na(dmcar$SECR)] = impSECR
-    #    dmcar$SESR[is.na(dmcar$SESR)] = impSESR
     dfi$Cor.ws[is.na(dfi$Cor.ws)] = imprho
     
     impSECR = sample(dfi$SECR[!is.na(dfi$SECR)], NmissCR, replace = TRUE) * scaleSE
@@ -227,8 +209,6 @@ resuni = genimp.mnar(
   maxCR = max(d$CR),
   minSR = -max(d$SR),
   maxSR = max(d$SR),
-  #  impSECR = 100,
-  #  impSESR = 100,
   imprho = 0.7,
   scaleSE = 1.5
 )
@@ -242,8 +222,6 @@ resnorm = genimp.mnar(
   meanSR = 0,
   sdCR = 10,
   sdSR = 12,
-  #  impSECR = 100,
-  #  impSESR = 100,
   imprho = 0.7,
   scaleSE = 1.5
 )
@@ -257,8 +235,6 @@ resnorm2 = genimp.mnar(
   meanSR = 3,
   sdCR = 10,
   sdSR = 12,
-  #  impSECR = 100,
-  #  impSESR = 100,
   imprho = 0.7,
   scaleSE = 1.5
 )
@@ -282,6 +258,7 @@ resnorm3
 #############################
 ##### Truncate MVNormal #####
 #############################
+
 lower = c(-Inf, -Inf) # for now simply multivariate
 upper = c(Inf, Inf)
 
@@ -306,36 +283,36 @@ restmvn
 
 ################################################################################
 
-evaluate_method <- function(res, true1, true2, method_name) {
-  m <- nrow(res)
+sum.meth = function(res, true1, true2, method_name) {
+  m = nrow(res)
   
-  Q_mat <- cbind(res$eff1, res$eff2)
-  Q_bar <- colMeans(Q_mat)                     
+  Q_mat = cbind(res$eff1, res$eff2)
+  Q_bar = colMeans(Q_mat)                     
   
-  B <- cov(Q_mat)                              
+  B = cov(Q_mat)                              
   
-  U_list <- lapply(1:m, function(i) {
+  U_list = lapply(1:m, function(i) {
     matrix(c(res$se1[i]^2, res$cov[i], 
              res$cov[i], res$se2[i]^2), 
            nrow = 2)
   })
   
-  U_bar <- Reduce("+", U_list) / m             
+  U_bar = Reduce("+", U_list) / m             
   
-  Tmat <- U_bar + (1 + 1/m) * B # total pooled variance (now I incorporate also the covariance)
+  Tmat = U_bar + (1 + 1/m) * B # total pooled variance (now I incorporate also the covariance)
   
-  se <- sqrt(diag(Tmat))
+  se = sqrt(diag(Tmat))
   
-  df <- (m - 1) * (1 + diag(U_bar) / ((1 + 1/m) * diag(B)))^2
+  df = (m - 1) * (1 + diag(U_bar) / ((1 + 1/m) * diag(B)))^2
   
-  ci1 <- Q_bar[1] + c(-1, 1) * qt(0.975, df[1]) * se[1]
-  ci2 <- Q_bar[2] + c(-1, 1) * qt(0.975, df[2]) * se[2]
+  ci1 = Q_bar[1] + c(-1, 1) * qt(0.975, df[1]) * se[1]
+  ci2 = Q_bar[2] + c(-1, 1) * qt(0.975, df[2]) * se[2]
   
-  bias1 <- Q_bar[1] - true1
-  bias2 <- Q_bar[2] - true2
+  bias1 = Q_bar[1] - true1
+  bias2 = Q_bar[2] - true2
   
-  cover1 <- as.numeric(ci1[1] <= true1 && true1 <= ci1[2])
-  cover2 <- as.numeric(ci2[1] <= true2 && true2 <= ci2[2])
+  cover1 = as.numeric(ci1[1] <= true1 && true1 <= ci1[2])
+  cover2 = as.numeric(ci2[1] <= true2 && true2 <= ci2[2])
   
   return(data.frame(
     method = method_name,
@@ -350,42 +327,41 @@ evaluate_method <- function(res, true1, true2, method_name) {
   ))
 }
 
-true1 <- mean(b3 + RTher[, 1])
-true2 <- mean(b3 + RTher[, 2])
+true1 = mean(b3 + RTher[, 1])
+true2 = mean(b3 + RTher[, 2])
 
-results_all <- rbind(
-  evaluate_method(resuni, true1, true2, "Uniform"),
-  evaluate_method(resnorm, true1, true2, "Normal(0,0)"),
-  evaluate_method(resnorm2, true1, true2, "Normal(3,3)"),
-  evaluate_method(resnorm3, true1, true2, "Normal(-3,-3)"),
-  evaluate_method(restmvn, true1, true2, "TMVN")
+results = rbind(
+  sum.meth(resuni, true1, true2, "Uniform"),
+  sum.meth(resnorm, true1, true2, "Normal(0,0)"),
+  sum.meth(resnorm2, true1, true2, "Normal(3,3)"),
+  sum.meth(resnorm3, true1, true2, "Normal(-3,-3)"),
+  sum.meth(restmvn, true1, true2, "TMVN")
 )
 
-print(results_all)
+print(results)
 
-resuni$method <- "Uniform"
-resnorm$method <- "Normal(0,0)"
-resnorm2$method <- "Normal(3,3)"
-resnorm3$method <- "Normal(-3,-3)"
-restmvn$method <- "TMVN"
+resuni$method = "Uniform"
+resnorm$method = "Normal(0,0)"
+resnorm2$method = "Normal(3,3)"
+resnorm3$method = "Normal(-3,-3)"
+restmvn$method = "TMVN"
 
-res_all <- rbind(resuni, resnorm, resnorm2, resnorm3, restmvn)
+results.table = rbind(resuni, resnorm, resnorm2, resnorm3, restmvn)
 
 # CR bias distribution
-ggplot(res_all, aes(x = eff1 - true1, fill = method)) +
+ggplot(results.table, aes(x = eff1 - true1, fill = method)) +
   geom_density(alpha = 0.4) +
   labs(title = "Bias Distribution for CR", x = "Bias", y = "Density") +
   theme_minimal()
 
 # CR coverage 
-
 library(tidyr)
 
-results_all_long <- results_all %>%
+resultslong = results %>%
   select(method, cover_CR, cover_SR) %>%
   pivot_longer(cols = c(cover_CR, cover_SR), names_to = "Outcome", values_to = "Coverage")
 
-ggplot(results_all_long, aes(x = method, y = Coverage, fill = Outcome)) +
+ggplot(resultslong, aes(x = method, y = Coverage, fill = Outcome)) +
   geom_bar(stat = "identity", position = "dodge") +
   labs(title = "Coverage Probability by Method", x = "Method", y = "Coverage") +
   geom_hline(yintercept = 0.95, linetype = "dashed", color = "red") +
