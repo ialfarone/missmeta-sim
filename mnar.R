@@ -367,4 +367,12 @@ ggplot(resultslong, aes(x = method, y = Coverage, fill = Outcome)) +
   geom_hline(yintercept = 0.95, linetype = "dashed", color = "red") +
   theme_minimal()
 
-
+ggplot(results, aes(x = method)) +
+  geom_linerange(aes(ymin = pci_lb_CR, ymax = pci_ub_CR), linewidth = 1.5) +
+  geom_hline(yintercept = 3, linetype = "dashed", color = "red") +
+  coord_flip() +
+  labs(
+    title = "Uncertainty Intervals for CR",
+    x = "Method", y = "CR Interval"
+  ) +
+  theme_minimal()
