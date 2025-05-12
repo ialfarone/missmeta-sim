@@ -18,6 +18,19 @@ multiverse sensitivity analyses in psychological MVMA when outcome-level missing
 
 
 
+Meta-analyses in psychology often pool outcomes measured using different instruments, with many studies reporting only a subset of these outcomes. 
+Such instruments might measure the same underlying construct and be statistically correlated, making multivariate meta-analysis a methodologically appropriate choice. 
+However, missing outcomes raise concerns about bias and inference validity, particularly when the missingness mechanism is unknown. 
+While some outcomes may be Missing Completely at Random (MCAR) or Missing at Random (MAR), a more complex scenario arises when outcomes are Missing Not At Random (MNAR).
+
+We propose a strategy for addressing missing study-level summary statistics using repeated stochastic single imputation. 
+Within each Monte Carlo replicate, missing effect estimates, standard errors, and within-study correlations are replaced by a single random draw from predefined donor distributions 
+(e.g., uniform, univariate normal, multivariate normal), to capture a range of plausible data-generating mechanisms. 
+By doing so, we systematically explore the interaction between assumptions about the missingness mechanism (MCAR, MAR, MNAR) and alternative meta-analytic specifications across thousands of replicates.
+The proposed approach has two main advantages: it is computationally efficient and, most importantly, makes explicit the assumptions underpinning the analysis rather than relying solely on the data. 
+This transparency allows researchers to clearly articulate and test the implications of their assumptions, including the use of delta-adjustments for sensitivity analyses. 
+We conclude by offering practical guidelines and open-source code to facilitate sensitivity analyses in psychological MVMA.
+
 
 
 
