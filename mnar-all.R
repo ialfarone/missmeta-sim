@@ -1,0 +1,377 @@
+################
+rm(list = ls())
+################
+
+library(mixmeta)    
+library(systemfit)  
+library(tmvtnorm)   
+library(ggplot2)
+library(dplyr)
+
+##############################
+# genimp.mnar: Imputation ####
+##############################
+
+genimp.mnar = function(df, distribution = c("uniform", "normal", "tmvn"),
+                       iter, minCR, maxCR, minSR, maxSR, meanCR, meanSR, sdCR, sdSR,
+                       meantmv, sigmatmv, lower, upper, imprho, delta, scaleSE) {
+  distribution = match.arg(distribution)
+  results = list()
+  
+  cor2cov = function(sd1, sd2, rho) sd1 * sd2 * rho
+  
+  for (d in 1:length(delta)) {
+    deltadj = delta[d]
+    for (i in 1:iter) {
+      dfi = df
+      NmissCR = sum(is.na(dfi$EstCR))
+      NmissSR = sum(is.na(dfi$EstSR))
+      
+      if (distribution == "uniform") {
+        impCR = runif(NmissCR, min = minCR, max = maxCR)
+        impSR = runif(NmissSR, min = minSR, max = maxSR)
+      } else if (distribution == "normal") {
+        impCR = rnorm(NmissCR, mean = meanCR + deltadj, sd = sdCR)
+        impSR = rnorm(NmissSR, mean = meanSR + deltadj, sd = sdSR)
+      } else if (distribution == "tmvn") {
+        imputed = rtmvnorm(
+          n = sum(is.na(dfi$Cor.ws)),
+          mean = meantmv + c(deltadj, deltadj),
+          sigma = sigmatmv,
+          lower = lower,
+          upper = upper
+        )
+        impCR = imputed[, 1]
+        impSR = imputed[, 2]
+      }
+      
+      dfi$EstCR[is.na(dfi$EstCR)] = sample(impCR)
+      dfi$EstSR[is.na(dfi$EstSR)] = sample(impSR)
+      dfi$Cor.ws[is.na(dfi$Cor.ws)] = imprho
+      
+      impSECR = sample(dfi$SECR[!is.na(dfi$SECR)], NmissCR, replace = TRUE) * scaleSE
+      impSESR = sample(dfi$SESR[!is.na(dfi$SESR)], NmissSR, replace = TRUE) * scaleSE
+      
+      dfi$SECR[is.na(dfi$SECR)] = impSECR
+      dfi$SESR[is.na(dfi$SESR)] = impSESR
+      
+      theta = cbind(dfi$EstCR, dfi$EstSR)
+      Sigma = cbind(dfi$SECR^2,
+                    cor2cov(dfi$SECR, dfi$SESR, dfi$Cor.ws),
+                    dfi$SESR^2)
+      
+      mv = mixmeta(theta, Sigma, method = "reml")
+      ci = confint(mv)
+      
+      results[[length(results) + 1]] = data.frame(
+        deltadj = deltadj,
+        iter = i,
+        eff1 = mv$coefficients[1],
+        eff2 = mv$coefficients[2],
+        se1 = sqrt(mv$vcov[1, 1]),
+        se2 = sqrt(mv$vcov[2, 2]),
+        cov = mv$vcov[1, 2],
+        ci.lb1 = ci[1, 1], ci.ub1 = ci[1, 2],
+        ci.lb2 = ci[2, 1], ci.ub2 = ci[2, 2]
+      )
+    }
+  }
+  do.call(rbind, results)
+}
+
+##############################
+# sum.meth: Rubin's rules ####
+##############################
+
+sum.meth = function(res, true1, true2, method) {
+  m = nrow(res)
+  Q_mat = cbind(res$eff1, res$eff2)
+  Q_bar = colMeans(Q_mat)
+  B = cov(Q_mat)
+  
+  U_list = lapply(1:m, function(i) {
+    matrix(c(res$se1[i]^2, res$cov[i], res$cov[i], res$se2[i]^2), nrow = 2)
+  })
+  U_bar = Reduce("+", U_list) / m
+  Tmat = U_bar + (1 + 1/m) * B
+  se = sqrt(diag(Tmat))
+  
+  df = (m - 1) * (1 + diag(U_bar) / ((1 + 1/m) * diag(B)))^2
+  
+  ci1 = Q_bar[1] + c(-1, 1) * qt(0.975, df[1]) * se[1]
+  ci2 = Q_bar[2] + c(-1, 1) * qt(0.975, df[2]) * se[2]
+  
+  data.frame(
+    method = method,
+    est_CR = Q_bar[1], est_SR = Q_bar[2],
+    bias_CR = Q_bar[1] - true1,
+    bias_SR = Q_bar[2] - true2,
+    cover_CR = as.numeric(ci1[1] <= true1 && true1 <= ci1[2]),
+    cover_SR = as.numeric(ci2[1] <= true2 && true2 <= ci2[2]),
+    pci_lb_CR = ci1[1], pci_ub_CR = ci1[2],
+    pci_lb_SR = ci2[1], pci_ub_SR = ci2[2]
+  )
+}
+
+#################################
+# scenarios: full simulation ####
+#################################
+
+scenarios = function(condition_grid, delta_seq, minCR, maxCR, 
+                         minSR, maxSR, lower, upper, iter = 1, 
+                         true1 = 3, true2 = 3) {
+  
+  results_all = lapply(1:nrow(condition_grid), function(i) {
+    cond = condition_grid[i, ]
+    sim(
+      seed = cond$seed,
+      delta_seq = delta_seq,
+      target = cond$target,
+      meanCR = cond$meanCR,
+      meanSR = cond$meanSR,
+      sdCR = cond$sdCR,
+      sdSR = cond$sdSR,
+      minCR = minCR,
+      maxCR = maxCR,
+      minSR = minSR,
+      maxSR = maxSR,
+      lower = lower,
+      upper = upper,
+      iter = iter,
+      true1 = true1,
+      true2 = true2,
+      distribution = cond$distribution
+    )
+    
+  })
+  do.call(rbind, results_all)
+  
+}
+
+##################################
+# sim: data generation + MNAR ####
+##################################
+
+sim = function(seed = NULL, delta_seq = delta_seq,
+               target, meanCR, meanSR, sdCR, sdSR,
+               minCR, maxCR, minSR, maxSR, lower, upper,
+               iter = iter, true1 = 3, true2 = 3,
+               distribution = c("normal", "uniform", "tmvn")) {
+  
+  distribution = match.arg(distribution)
+  if (!is.null(seed)) set.seed(seed)
+  
+  S = 50
+  N = 100
+  Mu = c(0, 0)
+  Tau = c(1, 1)
+  rho = 0.7
+  Sigma = diag(Tau) %*% matrix(c(1, rho, rho, 1), 2) %*% diag(Tau)
+  RTher = mvrnorm(S, Mu, Sigma)
+  
+  b0 = rnorm(S, 20, 2)
+  b1 = rnorm(S, 0.5, 0.2)
+  b2 = rnorm(S, 1.5, 0.3)
+  b3 = 3
+  
+  data = lapply(1:S, function(i) {
+    minA = runif(1, 18, 65)
+    maxA = runif(1, minA + 5, 80)
+    Age = runif(N, minA, maxA)
+    Sex = rbinom(N, 1, 0.45)
+    Ther = rbinom(N, 1, 0.5)
+    
+    CR = rnorm(N, b0[i] + b1[i] * Age + b2[i] * Sex + (b3 + RTher[i, 1]) * Ther, 5)
+    SR = rnorm(N, b0[i] + b1[i] * Age + b2[i] * Sex + (b3 + RTher[i, 2]) * Ther, 7)
+    
+    data.frame(Study = i, Age, Sex = factor(Sex), Ther = factor(Ther), CR, SR)
+  })
+  
+  d = do.call(rbind, data)
+  
+  dat = lapply(1:S, function(s) {
+    Sn = d[d$Study == s, ]
+    fitsur = systemfit(list(CR = CR ~ Age + Sex + Ther, SR = SR ~ Age + Sex + Ther), 
+                       "SUR", data = Sn)
+    sum = summary(fitsur)
+    data.frame(
+      Study = s,
+      EstCR = sum$coefficients[4, 1],
+      EstSR = sum$coefficients[8, 1],
+      SECR = sum$coefficients[4, 2],
+      SESR = sum$coefficients[8, 2],
+      Cor.ws = sum$residCor["CR", "SR"]
+    )
+  })
+  
+  dat = do.call(rbind, dat)
+  
+  betaCR = 2
+  betaSR = -1.5
+  invlogit <- function(x) plogis(x)
+  
+  beta0_cr = uniroot(function(b0) mean(invlogit(b0 + betaCR * dat$EstCR)) - (1 - target / 2), c(-20, 20))$root
+  prob_cr = invlogit(beta0_cr + betaCR * dat$EstCR)
+  beta0_sr = uniroot(function(b0) mean(invlogit(b0 + betaSR * dat$EstSR)) - (1 - target / 2), c(-20, 20))$root
+  prob_sr = invlogit(beta0_sr + betaSR * dat$EstSR)
+  
+  M_cr = rbinom(nrow(dat), 1, 1 - prob_cr)
+  M_sr = rbinom(nrow(dat), 1, 1 - prob_sr)
+  
+  conflict = which(M_cr == 1 & M_sr == 1)
+  meanCR_obs = mean(dat$EstCR)
+  meanSR_obs = mean(dat$EstSR)
+  
+  for (i in conflict) {
+    dist_cr = abs(dat$EstCR[i] - meanCR_obs)
+    dist_sr = abs(dat$EstSR[i] - meanSR_obs)
+    if (dist_cr > dist_sr) {
+      M_sr[i] = 0
+    } else {
+      M_cr[i] = 0
+    }
+  }
+  
+  dat[M_cr == 1, c("EstCR", "SECR")] = NA
+  dat[M_sr == 1, c("EstSR", "SESR")] = NA
+  dat$Cor.ws[is.na(dat$EstCR) | is.na(dat$EstSR)] = NA
+  
+  res = genimp.mnar(
+    df = dat,
+    distribution = distribution,
+    iter = iter,
+    minCR = minCR, maxCR = maxCR,
+    minSR = minSR, maxSR = maxSR,
+    meanCR = meanCR, meanSR = meanSR,
+    sdCR = sdCR, sdSR = sdSR,
+    imprho = 0.7,
+    delta = delta_seq,
+    scaleSE = 1.5,
+    meantmv = c(meanCR, meanSR),
+    sigmatmv = matrix(c(sdCR^2, 0.7 * sdCR * sdSR, 0.7 * sdCR * sdSR, sdSR^2), nrow = 2),
+    lower = lower,
+    upper = upper
+  )
+  
+  sumbydelta = lapply(
+    split(res, res$deltadj),
+    function(df) sum.meth(df, true1 = true1, true2 = true2, 
+                          method = paste0("delta_", unique(df$deltadj)))
+  )
+  
+  resbydelta = do.call(rbind, sumbydelta)
+  resbydelta$replicate = seed
+  resbydelta$distribution = distribution
+  resbydelta$meanCR = meanCR
+  
+  return(resbydelta)
+}
+
+######################
+# conditions grid ####
+######################
+
+data_grid <- expand.grid(
+  seed = 1:1, 
+  distribution = c("uniform", "normal", "tmvn"),
+  target = c(0.05, 0.10, 0.20, 0.30),
+  stringsAsFactors = FALSE
+)
+
+uniform_tmvn = subset(data_grid, distribution != "normal")
+uniform_tmvn$meanCR = ifelse(uniform_tmvn$distribution == "uniform", 0, 3)
+uniform_tmvn$sdCR = ifelse(uniform_tmvn$distribution == "uniform", 0, 6)
+uniform_tmvn$meanSR = uniform_tmvn$meanCR
+uniform_tmvn$sdSR = ifelse(uniform_tmvn$distribution == "uniform", 0, 6)
+
+normeans = c(0, 3, -3)
+normal_grid = do.call(rbind, lapply(normeans, function(m) {
+  g = subset(data_grid, distribution == "normal")
+  g$meanCR = m
+  g$meanSR = m
+  g$sdCR = 6
+  g$sdSR = 6
+  g
+}))
+
+grid = rbind(uniform_tmvn, normal_grid)
+
+##########################
+# Run full simulation ####
+##########################
+
+delta_seq = seq(-9, 9, by = 2.5)
+
+results_all = scenarios(
+  condition_grid = grid,
+  delta_seq = delta_seq,
+  minCR = -10, maxCR = 10,
+  minSR = -10, maxSR = 10,
+  lower = c(-Inf, -Inf),
+  upper = c(Inf, Inf),
+  iter = 2,  # for the imputations
+  true1 = 3,
+  true2 = 3
+)
+
+results_all
+
+
+results_summary = results_all %>%
+  group_by(distribution, meanCR, method) %>%
+  summarise(
+    mean_bias_CR = mean(bias_CR),
+    mean_bias_SR = mean(bias_SR),
+    coverage_CR = mean(cover_CR),
+    coverage_SR = mean(cover_SR),
+    .groups = "drop"
+  )
+
+# Plot bias
+ggplot(results_summary, aes(x = method, y = mean_bias_CR, fill = interaction(distribution, meanCR))) +
+  geom_bar(stat = "identity", position = position_dodge()) +
+  labs(title = "Mean Bias for CR", x = "Delta Adjustment", y = "Bias") +
+  theme_minimal()
+
+ggplot(results_summary, aes(x = method, y = mean_bias_SR, fill = interaction(distribution, meanCR))) +
+  geom_bar(stat = "identity", position = position_dodge()) +
+  labs(title = "Mean Bias for SR", x = "Delta Adjustment", y = "Bias") +
+  theme_minimal()
+
+# Plot coverage
+ggplot(results_summary, aes(x = method, y = coverage_CR, fill = interaction(distribution, meanCR))) +
+  geom_bar(stat = "identity", position = position_dodge()) +
+  labs(title = "Coverage for CR", x = "Delta Adjustment", y = "Coverage") +
+  theme_minimal()
+
+ggplot(results_summary, aes(x = method, y = coverage_SR, fill = interaction(distribution, meanCR))) +
+  geom_bar(stat = "identity", position = position_dodge()) +
+  labs(title = "Coverage for SR", x = "Delta Adjustment", y = "Coverage") +
+  theme_minimal()
+
+
+################################################################################
+# Plot all panels
+library(ggplot2)
+library(patchwork)
+library(tidyr)
+library(dplyr)
+
+results_long = results_all[,c("replicate", "distribution", "meanCR", "method", "est_CR")]
+results_long = results_long %>%
+  mutate(delta = as.numeric(gsub("delta_", "", method)))
+
+avg_curve <- results_long %>%
+  group_by(distribution, meanCR, delta) %>%
+  summarise(mean_est_CR = mean(est_CR), .groups = "drop")
+
+p_list <- results_long %>%
+  ggplot(aes(x = delta, y = est_CR, color = factor(replicate), group = replicate)) +
+  geom_point() + geom_line() +
+  geom_line(data = avg_curve, aes(x = delta, y = mean_est_CR), color = "black", size = 1.3, inherit.aes = FALSE) +
+  facet_grid(distribution ~ meanCR, labeller = label_both) +
+  labs(title = "Estimated CR across delta", x = expression(delta), y = "Estimated CR", color = "Replicate") +
+  theme_minimal()
+
+print(p_list)
+
