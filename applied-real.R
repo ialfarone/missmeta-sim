@@ -1,3 +1,4 @@
+library(mixmeta)
 genimp.mnar = function(df, distribution = c("uniform", "normal", "tmvn"),
                        iter, minCR, maxCR, minSR, maxSR, meanCR, meanSR, sdCR, sdSR,
                        meantmv, sigmatmv, lower, upper, imprho, scaleSE) {
@@ -121,7 +122,7 @@ head(dmnar)
 
 
 ## Analyze real data ####
-library(mixmeta)
+
 resuni = genimp.mnar(
   df = dmnar,
   distribution = "uniform",
