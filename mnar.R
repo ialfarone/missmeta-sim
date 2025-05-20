@@ -5,8 +5,10 @@ library(dplyr)
 library(ggplot2)
 library(tmvtnorm)
 
-S = 100
-N = 1000
+# Simulate dataset ####
+
+S = 50
+N = 100
 
 Mu = c(0, 0)
 Tau = c(1, 1)
@@ -23,7 +25,7 @@ data = vector(mode = "list", length = S)
 
 for (i in 1:S) {
   minA = runif(1, min = 18, max = 65)
-  maxA = runif(1, min = minA + 5, max = 90)
+  maxA = runif(1, min = minA + 5, max = 80)
   Age = runif(N, min = minA, max = maxA)
   
   pFem = 0.45
@@ -35,7 +37,7 @@ for (i in 1:S) {
              sd = 5)
   SR = rnorm(N,
              mean = b0 + b1 * Age + b2 * Sex + (b3 + RTher[i, 2]) * Ther,
-             sd = 9)
+             sd = 7)
   
   data[[i]] = data.frame(
     Study = i,
@@ -50,6 +52,8 @@ for (i in 1:S) {
 d = do.call(rbind, data)
 
 dat = vector(mode = "list", length = S)
+
+# Calculate effect size and standard errors ####
 
 for (s in 1:S) {
   Sn = d[d$Study == s, ]
@@ -73,7 +77,7 @@ for (s in 1:S) {
 dat = do.call(rbind, dat)
 head(dat)
 
-## Multivariate meta-analysis ####
+# Multivariate meta-analysis ####
 
 theta = cbind(dat$EstCR, dat$EstSR)
 cor2cov = function(sd1, sd2, rho) {
@@ -89,22 +93,41 @@ summary(mv.c)
 # Generate missing ####
 
 ## Missing Not At Random ####
+target = 0.2
+betaCR = 2
+betaSR = -1.5
+invlogit <- function(x) plogis(x)
 
-target = 0.2  
-beta1 = 2
+beta0_cr = uniroot(function(b0) mean(invlogit(b0 + betaCR * dat$EstCR)) - (1 - target / 2), c(-20, 20))$root
+prob_cr = invlogit(beta0_cr + betaCR * dat$EstCR)
+beta0_sr = uniroot(function(b0) mean(invlogit(b0 + betaSR * dat$EstSR)) - (1 - target / 2), c(-20, 20))$root
+prob_sr = invlogit(beta0_sr + betaSR * dat$EstSR)
 
-beta0 = uniroot(function(b0) mean(plogis(b0 + beta1 * dat$EstCR)) -
-                   (1 - target),
-                 c(-20, 20))$root
+M_cr = rbinom(nrow(dat), 1, 1 - prob_cr)
+M_sr = rbinom(nrow(dat), 1, 1 - prob_sr)
 
-prob_obs = plogis(beta0 + beta1 * dat$EstCR)
+conflict = which(M_cr == 1 & M_sr == 1)
+meanCR_obs = mean(dat$EstCR)
+meanSR_obs = mean(dat$EstSR)
 
-dmnar    = dat
-M0       = rbinom(nrow(dat), 1, prob_obs)
-dmnar[M0 == 0, c("EstCR", "SECR", "Cor.ws")] = NA
+for (i in conflict) {
+  dist_cr = abs(dat$EstCR[i] - meanCR_obs)
+  dist_sr = abs(dat$EstSR[i] - meanSR_obs)
+  if (dist_cr > dist_sr) {
+    M_sr[i] = 0
+  } else {
+    M_cr[i] = 0
+  }
+}
+
+dmnar = dat
+
+dmnar[M_cr == 1, c("EstCR", "SECR")] = NA
+dmnar[M_sr == 1, c("EstSR", "SESR")] = NA
+dmnar$Cor.ws[is.na(dmnar$EstCR) | is.na(dmnar$EstSR)] = NA
 
 head(dmnar)
-sum(is.na(dmnar$EstCR))
+sum(is.na(dmnar$Cor.ws))
 
 ggplot(dmnar, aes(x = dat$EstCR, fill = is.na(EstCR))) +
   geom_histogram(binwidth = 2, position = "stack") +
@@ -112,7 +135,13 @@ ggplot(dmnar, aes(x = dat$EstCR, fill = is.na(EstCR))) +
   scale_fill_manual(values = c("#5B5F97", "#EE6C4D"), name = "CR Missing") +
   theme_minimal()
 
-## Multivariate meta-analysis #### Check
+ggplot(dmnar, aes(x = dat$EstSR, fill = is.na(EstSR))) +
+  geom_histogram(binwidth = 2, position = "stack") +
+  labs(title = "Missingness in SR as a function of SR", x = "EstSR", y = "Count") +
+  scale_fill_manual(values = c("#5B5F97", "#EE6C4D"), name = "SR Missing") +
+  theme_minimal()
+
+# Multivariate meta-analysis #### Check
 
 theta.m = cbind(dmnar$EstCR, dmnar$EstSR)
 Sigma.m = cbind(dmnar$SECR^2,
@@ -125,10 +154,13 @@ summary(mv.m)
 
 # Random sample generator for continuous missing data for MNAR ####
 genimp.mnar = function(df, distribution = c("uniform", "normal", "tmvn"),
-                  iter, minCR, maxCR, minSR, maxSR, meanCR, meanSR, sdCR, sdSR,
-                  meantmv, sigmatmv, lower, upper, imprho, scaleSE) {
+                       iter, minCR, maxCR, minSR, maxSR, meanCR, meanSR, sdCR, sdSR,
+                       meantmv, sigmatmv, lower, upper, imprho, scaleSE) {
   distribution = match.arg(distribution)
   results = vector(mode = "list", length = iter)
+  
+  all_impCR = list()
+  all_impSR = list()
   
   cor2cov = function(sd1, sd2, rho) {
     sd1 * sd2 * rho
@@ -141,17 +173,14 @@ genimp.mnar = function(df, distribution = c("uniform", "normal", "tmvn"),
     NmissSR = sum(is.na(dfi$EstSR))
     
     if (distribution == "uniform") {
-      
       impCR = runif(NmissCR, min = minCR, max = maxCR)
       impSR = runif(NmissSR, min = minSR, max = maxSR)
       
     } else if (distribution == "normal") {
-      
       impCR = rnorm(NmissCR, mean = meanCR, sd = sdCR)
       impSR = rnorm(NmissSR, mean = meanSR, sd = sdSR)
       
     } else if (distribution == "tmvn") {
-      
       imputed = rtmvnorm(
         n = sum(is.na(dfi$Cor.ws)),
         mean = meantmv,
@@ -159,22 +188,21 @@ genimp.mnar = function(df, distribution = c("uniform", "normal", "tmvn"),
         lower = lower,
         upper = upper
       )
-      
       impCR = imputed[, 1]
       impSR = imputed[, 2]
     }
     
+    all_impCR[[i]] = impCR
+    all_impSR[[i]] = impSR
     
-    dfi$EstCR[is.na(dfi$EstCR)] = sample(impCR, NmissCR, replace = F)
-    dfi$EstSR[is.na(dfi$EstSR)] = sample(impSR, NmissSR, replace = F)
+    dfi$EstCR[is.na(dfi$EstCR)] = sample(impCR, NmissCR, replace = FALSE)
+    dfi$EstSR[is.na(dfi$EstSR)] = sample(impSR, NmissSR, replace = FALSE)
     dfi$Cor.ws[is.na(dfi$Cor.ws)] = imprho
     
     impSECR = sample(dfi$SECR[!is.na(dfi$SECR)], NmissCR, replace = TRUE) * scaleSE
     impSESR = sample(dfi$SESR[!is.na(dfi$SESR)], NmissSR, replace = TRUE) * scaleSE
-    
     dfi$SECR[is.na(dfi$SECR)] = impSECR 
     dfi$SESR[is.na(dfi$SESR)] = impSESR 
-    
     
     theta = cbind(dfi$EstCR, dfi$EstSR)
     Sigma = cbind(dfi$SECR^2,
@@ -198,7 +226,11 @@ genimp.mnar = function(df, distribution = c("uniform", "normal", "tmvn"),
     )
   }
   
-  do.call(rbind, results)
+  return(list(
+    impCR = unlist(all_impCR),
+    impSR = unlist(all_impSR),
+    results = do.call(rbind, results)
+  ))
 }
 
 resuni = genimp.mnar(
@@ -212,7 +244,9 @@ resuni = genimp.mnar(
   imprho = 0.7,
   scaleSE = 1.5
 )
-resuni
+resuni = resuni$results
+
+# Plot all imputed EstCR and EstSR values
 
 resnorm = genimp.mnar(
   df = dmnar,
@@ -220,12 +254,24 @@ resnorm = genimp.mnar(
   iter = 10,
   meanCR = 0,
   meanSR = 0,
-  sdCR = 10,
-  sdSR = 12,
+  sdCR = 6,
+  sdSR = 6,
   imprho = 0.7,
   scaleSE = 1.5
 )
-resnorm
+
+
+hist(resnorm$impCR, col = "#C64191", freq = FALSE,
+     main = "All Imputed EstCR",
+     xlab = "EstCR")
+curve(dnorm(x, mean=0,sd=6), add=T, col="#028090")
+
+hist(resnorm$impSR, col = "#F0F3BD", freq = FALSE,
+     main = "All Imputed EstSR",
+     xlab = "EstSR")
+curve(dnorm(x, mean=0,sd=6), add=T, col="#028090")
+
+resnorm = resnorm$results
 
 resnorm2 = genimp.mnar(
   df = dmnar,
@@ -233,12 +279,24 @@ resnorm2 = genimp.mnar(
   iter = 10,
   meanCR = 3,
   meanSR = 3,
-  sdCR = 10,
-  sdSR = 12,
+  sdCR = 6,
+  sdSR = 6,
   imprho = 0.7,
   scaleSE = 1.5
 )
-resnorm2
+
+
+hist(resnorm2$impCR, col = "#C64191", freq = FALSE,
+     main = "All Imputed EstCR",
+     xlab = "EstCR")
+curve(dnorm(x, mean=3,sd=6), add=T, col="#028090")
+
+hist(resnorm2$impSR, col = "#F0F3BD", freq = FALSE,
+     main = "All Imputed EstSR",
+     xlab = "EstSR")
+curve(dnorm(x, mean=3,sd=6), add=T, col="#028090")
+
+resnorm2=resnorm2$results
 
 resnorm3 = genimp.mnar(
   df = dmnar,
@@ -253,7 +311,19 @@ resnorm3 = genimp.mnar(
   imprho = 0.7,
   scaleSE = 1.5
 )
-resnorm3
+
+
+hist(resnorm3$impCR, col = "#C64191", freq = FALSE,
+     main = "All Imputed EstCR",
+     xlab = "EstCR")
+curve(dnorm(x, mean=-3,sd=6), add=T, col="#028090")
+
+hist(resnorm3$impSR, col = "#F0F3BD", freq = FALSE,
+     main = "All Imputed EstSR",
+     xlab = "EstSR")
+curve(dnorm(x, mean=-3,sd=6), add=T, col="#028090")
+
+resnorm3 = resnorm3$results
 
 #############################
 ##### Truncate MVNormal #####
@@ -262,24 +332,21 @@ resnorm3
 lower = c(-Inf, -Inf) # for now simply multivariate
 upper = c(Inf, Inf)
 
-# for now from the data, but this does not hold for MNAR  
-
-meantmv = colMeans(cbind(dmnar$EstCR, dmnar$EstSR), na.rm = TRUE)
-sigmatmv = cov(cbind(dmnar$EstCR, dmnar$EstSR), use = "complete.obs")
-
 restmvn = genimp.mnar(
   df = dmnar,
   distribution = "tmvn",
-  iter = 10,
+  iter = 1000,
   lower = lower,
   upper = upper, 
-  meantmv = meantmv,
-  sigmatmv = sigmatmv, 
+  meantmv = c(3,3),
+  sdCR = 6,
+  sdSR = 6,
+  sigmatmv = matrix(c(6^2, 0.7 * 6 * 6, 0.7 * 6 * 6, 6^2), nrow = 2), 
   imprho = 0.7,
   scaleSE = 1.5
 )
 
-restmvn
+restmvn = restmvn$results
 
 ################################################################################
 
@@ -379,3 +446,4 @@ ggplot(results, aes(x = method)) +
     x = "Method", y = "CR Interval"
   ) +
   theme_minimal()
+

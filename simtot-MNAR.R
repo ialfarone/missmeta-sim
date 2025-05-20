@@ -6,6 +6,7 @@
 # Cond 3: Distribution -> uniform, normal(0), normal(3), normal(-3), mvt(3,3)
 
 # I have then 4*5*5*5 = 500 situations
+# I simulate one dataset, I perform all the analyses and then I replicate them 10^4 times
 
 # I want to extract a list in which I have a dataset for each condition
 # The goal is to look at the distribution of the CR and SR
@@ -17,8 +18,8 @@ library(dplyr)
 library(ggplot2)
 library(tmvtnorm)
 
-S = 100
-N = 1000
+S = 50
+N = 100
 
 Mu = c(0, 0)
 Tau = c(1, 1)
@@ -101,24 +102,59 @@ summary(mv.c)
 # Generate missing ####
 
 ## Missing Not At Random ####
+# --- Directional Exclusive MNAR ---
+target <- 0.2
+betaCR <- 2     # CR missing when low
+betaSR <- -1.5  # SR missing when high
 
-target = 0.2  
-beta1 = 2
+invlogit <- function(x) plogis(x)
 
-beta0 = uniroot(function(b0) mean(plogis(b0 + beta1 * dat$EstCR)) -
-                  (1 - target),
-                c(-20, 20))$root
+beta0_cr <- uniroot(function(b0) mean(invlogit(b0 + betaCR * dat$EstCR)) - (1 - target / 2), c(-20, 20))$root
+prob_cr <- invlogit(beta0_cr + betaCR * dat$EstCR)
 
-prob_obs = plogis(beta0 + beta1 * dat$EstCR)
+beta0_sr <- uniroot(function(b0) mean(invlogit(b0 + betaSR * dat$EstSR)) - (1 - target / 2), c(-20, 20))$root
+prob_sr <- invlogit(beta0_sr + betaSR * dat$EstSR)
 
-dmnar    = dat
-M0       = rbinom(nrow(dat), 1, prob_obs)
-dmnar[M0 == 0, c("EstCR", "SECR", "Cor.ws")] = NA
+M_cr <- rbinom(nrow(dat), 1, 1 - prob_cr)
+M_sr <- rbinom(nrow(dat), 1, 1 - prob_sr)
 
-head(dmnar)
-sum(is.na(dmnar$EstCR))
+# Conflict resolution: keep the more extreme one
+conflict <- which(M_cr == 1 & M_sr == 1)
+meanCR <- mean(dat$EstCR)
+meanSR <- mean(dat$EstSR)
 
-ggplot(dmnar, aes(x = dat$EstCR, fill = is.na(EstCR))) +
+for (i in conflict) {
+  dist_cr <- abs(dat$EstCR[i] - meanCR)
+  dist_sr <- abs(dat$EstSR[i] - meanSR)
+  if (dist_cr > dist_sr) {
+    M_sr[i] <- 0  # CR is more deviant: keep SR, drop CR
+  } else {
+    M_cr[i] <- 0  # SR is more deviant: keep CR, drop SR
+  }
+}
+
+dmnar <- dat
+dmnar[M_cr == 1, c("EstCR", "SECR")] <- NA
+dmnar[M_sr == 1, c("EstSR", "SESR")] <- NA
+dmnar$Cor.ws[is.na(dmnar$EstCR) | is.na(dmnar$EstSR)] <- NA
+# Assuming `dat` is your study-level data frame with effect estimates
+
+mnar_result <- genmnar(dat, target = 0.2, betaCR = 2, betaSR = -1.5)
+
+# Extract the MNAR dataset
+dmnar <- mnar_result$data
+
+# Print diagnostic info
+print(mnar_result$table)
+cat("Overall missing rate:", round(100 * mnar_result$missing_rate, 2), "%\n")
+
+
+table(
+  CR_missing = is.na(dmnar$EstCR),
+  SR_missing = is.na(dmnar$EstSR)
+)
+
+ggplot(dmnar, aes(x = dat$EstSR, fill = is.na(EstSR))) +
   geom_histogram(binwidth = 2, position = "stack") +
   labs(title = "Missingness in CR as a function of CR", x = "EstCR", y = "Count") +
   scale_fill_manual(values = c("#5B5F97", "#EE6C4D"), name = "CR Missing") +
@@ -138,6 +174,7 @@ summary(mv.m)
 genimp.mnar = function(df, distribution = c("uniform", "normal", "tmvn"),
                        iter, minCR, maxCR, minSR, maxSR, meanCR, meanSR, sdCR, sdSR,
                        meantmv, sigmatmv, lower, upper, imprho, delta, scaleSE) {
+  
   distribution = match.arg(distribution)
   results = list()
   
@@ -145,7 +182,9 @@ genimp.mnar = function(df, distribution = c("uniform", "normal", "tmvn"),
     sd1 * sd2 * rho
   }
   
-  for (d in delta) {
+  for (d in 1:length(delta)) {
+    deltadj = delta[d]  # renamed from delta_value
+    
     for (i in 1:iter) {
       dfi = df 
       
@@ -159,14 +198,14 @@ genimp.mnar = function(df, distribution = c("uniform", "normal", "tmvn"),
         
       } else if (distribution == "normal") {
         
-        impCR = rnorm(NmissCR, mean = meanCR + delta, sd = sdCR)
-        impSR = rnorm(NmissSR, mean = meanSR, sd = sdSR)
+        impCR = rnorm(NmissCR, mean = meanCR + deltadj, sd = sdCR)
+        impSR = rnorm(NmissSR, mean = meanSR + deltadj, sd = sdSR)
         
       } else if (distribution == "tmvn") {
         
         imputed = rtmvnorm(
           n = sum(is.na(dfi$Cor.ws)),
-          mean = meantmv + c(d, 0),
+          mean = meantmv + c(deltadj, deltadj),
           sigma = sigmatmv,
           lower = lower,
           upper = upper
@@ -195,7 +234,7 @@ genimp.mnar = function(df, distribution = c("uniform", "normal", "tmvn"),
       ci = confint(mv)
       
       results[[length(results) + 1]] = data.frame(
-        delta = d,
+        deltadj = deltadj,
         iter = i,
         eff1 = mv$coefficients[1],
         eff2 = mv$coefficients[2],
@@ -212,3 +251,125 @@ genimp.mnar = function(df, distribution = c("uniform", "normal", "tmvn"),
   
   do.call(rbind, results)
 }
+
+resnorm = genimp.mnar(
+  df = dmnar,
+  distribution = "normal",
+  iter = 10,
+  meanCR = 3, 
+  meanSR = 3,
+  sdCR = 5,
+  sdSR = 5,
+  imprho = 0.7,
+  delta = seq(-7, 7, by = 2),
+  scaleSE = 1.5
+)
+
+resnorm
+
+##################################
+### Function to summarize data####
+##################################
+
+sum.meth = function(res, true1, true2, method_name) {
+  m = nrow(res)
+  
+  Q_mat = cbind(res$eff1, res$eff2)
+  Q_bar = colMeans(Q_mat)                     
+  
+  B = cov(Q_mat)                              
+  
+  U_list = lapply(1:m, function(i) {
+    matrix(c(res$se1[i]^2, res$cov[i], 
+             res$cov[i], res$se2[i]^2), 
+           nrow = 2)
+  })
+  
+  U_bar = Reduce("+", U_list) / m             
+  
+  Tmat = U_bar + (1 + 1/m) * B # total pooled variance (now I incorporate also the covariance)
+  
+  se = sqrt(diag(Tmat))
+  
+  df = (m - 1) * (1 + diag(U_bar) / ((1 + 1/m) * diag(B)))^2
+  
+  ci1 = Q_bar[1] + c(-1, 1) * qt(0.975, df[1]) * se[1]
+  ci2 = Q_bar[2] + c(-1, 1) * qt(0.975, df[2]) * se[2]
+  
+  bias1 = Q_bar[1] - true1
+  bias2 = Q_bar[2] - true2
+  
+  cover1 = as.numeric(ci1[1] <= true1 && true1 <= ci1[2])
+  cover2 = as.numeric(ci2[1] <= true2 && true2 <= ci2[2])
+  
+  return(data.frame(
+    method = method_name,
+    est_CR = Q_bar[1],
+    est_SR = Q_bar[2],
+    bias_CR = bias1,
+    bias_SR = bias2,
+    cover_CR = cover1,
+    cover_SR = cover2,
+    pci_lb_CR = ci1[1],
+    pci_ub_CR = ci1[2],
+    pci_lb_SR = ci2[1],
+    pci_ub_SR = ci2[2]
+  ))
+}
+
+true1 <- 3
+true2 <- 3
+
+sumbydelta <- lapply(
+  split(resnorm, resnorm$delta),
+  function(df) 
+    sum.meth(df, true1 = true1, true2 = true2, 
+             method_name = paste0("delta_", unique(df$delta)))
+)
+
+resbydelta = do.call(rbind, sumbydelta)
+resbydelta
+
+
+
+ggplot(resbydelta, aes(x = seq(-7, 7, by = 2))) +
+  geom_line(aes(y = est_CR), color = "#1f77b4") +
+  geom_ribbon(aes(ymin = pci_lb_CR, ymax = pci_ub_CR), alpha = 0.2, fill = "#1f77b4") +
+  labs(x = expression(delta),
+       y = "Pooled Estimate (CR)") +
+  theme_minimal()
+
+ggplot(resbydelta, aes(x = seq(-7, 7, by = 2), y = bias_CR)) +
+  geom_line(color = "#d62728") +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "grey50") +
+  labs(x = expression(delta),
+       y = "Bias (Estimate - True Value)") +
+  theme_minimal()
+
+ggplot(resbydelta, aes(x = seq(-7, 7, by = 2), y = cover_CR)) +
+  geom_point(size = 3) +
+  geom_line() +
+  geom_hline(yintercept = 1, linetype = "dashed", color = "darkgreen") +
+  labs(x = expression(delta),
+       y = "Coverage") +
+  theme_minimal()
+
+
+deltas <- seq(-7, 7, by = 2)  # make sure this is defined for x-axis
+
+ggplot(resbydelta, aes(x = deltas)) +
+  # CR line and ribbon
+  geom_line(aes(y = est_CR), color = "#1f77b4", size = 1) +
+  #geom_ribbon(aes(ymin = pci_lb_CR, ymax = pci_ub_CR), alpha = 0.2, fill = "#1f77b4") +
+
+    geom_line(aes(y = 3), color = "#000", size = 1) +
+  
+  # SR line and ribbon
+  geom_line(aes(y = est_SR), color = "#d62728", size = 1) +
+ #eom_ribbon(aes(ymin = pci_lb_SR, ymax = pci_ub_SR), alpha = 0.2, fill = "#d62728") +
+  
+  labs(x = expression(delta),
+       y = "Pooled Estimate",
+       title = "Pooled Estimates with 95% CIs for CR and SR")+
+  theme_minimal()
+

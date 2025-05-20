@@ -119,14 +119,14 @@ sum.meth = function(res, true1, true2, method) {
 #################################
 
 scenarios = function(condition_grid, delta_seq, minCR, maxCR, 
-                         minSR, maxSR, lower, upper, iter = 5, 
-                         true1 = 3, true2 = 3) {
+                     minSR, maxSR, lower, upper, iter = 10, 
+                     true1 = 3, true2 = 3) {
   
   results_all = lapply(1:nrow(condition_grid), function(i) {
     cond = condition_grid[i, ]
     sim(
       seed = cond$seed,
-      delta_seq = delta_seq,
+      delta_seq,
       target = cond$target,
       meanCR = cond$meanCR,
       meanSR = cond$meanSR,
@@ -153,7 +153,7 @@ scenarios = function(condition_grid, delta_seq, minCR, maxCR,
 # sim: data generation + MNAR ####
 ##################################
 
-sim = function(seed = NULL, delta_seq = delta_seq,
+sim = function(seed = NULL, delta_seq,
                target, meanCR, meanSR, sdCR, sdSR,
                minCR, maxCR, minSR, maxSR, lower, upper,
                iter = iter, true1 = 3, true2 = 3,
@@ -277,7 +277,7 @@ sim = function(seed = NULL, delta_seq = delta_seq,
 ######################
 
 data_grid <- expand.grid(
-  seed = 1:5, 
+  seed = 1:10, 
   distribution = c("uniform", "normal", "tmvn"),
   target = c(0.10, 0.20, 0.30),
   stringsAsFactors = FALSE
@@ -308,18 +308,52 @@ head(grid)
 
 delta_seq = seq(-6, 6, by = 1.5)
 
-results_all = scenarios(
-  condition_grid = grid,
-  delta_seq = delta_seq,
-  minCR = -100, maxCR = 100,
-  minSR = -100, maxSR = 100,
-  lower = c(-Inf, -Inf),
-  upper = c(Inf, Inf),
-  iter = 10,  # for the imputations
-  true1 = 3,
-  true2 = 3
+library(parallel)
+
+# Crea cluster con 3 core
+cl <- makeCluster(detectCores() - 1)
+
+clusterEvalQ(cl, {
+  library(mixmeta); library(mvtnorm); library(systemfit); library(tmvtnorm)
+})
+
+clusterExport(
+  cl,
+  varlist = ls(),           # <<– così esporti qualunque oggetto nell’ambiente globale
+  envir   = .GlobalEnv
 )
 
+
+results_all_list <- parLapply(cl, 1:nrow(grid), function(i) {
+  cond <- grid[i, ]
+  sim(
+    seed = cond$seed,
+    delta_seq,
+    target = cond$target,
+    meanCR = cond$meanCR,
+    meanSR = cond$meanSR,
+    sdCR = cond$sdCR,
+    sdSR = cond$sdSR,
+    minCR = minCR,
+    maxCR = maxCR,
+    minSR = minSR,
+    maxSR = maxSR,
+    lower = lower,
+    upper = upper,
+    iter = iter,
+    true1 = true1,
+    true2 = true2,
+    distribution = cond$distribution
+  )
+})
+
+# Chiude il cluster
+stopCluster(cl)
+
+# Unisce i risultati
+results_all <- do.call(rbind, results_all_list)
+
+# Mostra i risultati
 results_all
 
 # Inspect the results by distribution, delta, missingness, meanCR
@@ -429,8 +463,8 @@ p_list <- ggplot(results_long, aes(x = delta, y = est_CR, color = factor(replica
   geom_point() + 
   geom_line() +
   geom_point(data = avg_curve,
-            aes(x = delta, y = mean_est_CR, group = interaction(distribution, meanCR, target)),
-            color = "black", size = 1.3, inherit.aes = FALSE) +
+             aes(x = delta, y = mean_est_CR, group = interaction(distribution, meanCR, target)),
+             color = "black", size = 1.3, inherit.aes = FALSE) +
   facet_wrap(distribution + meanCR ~ target) +
   facet_grid(rows = vars(distribution, meanCR),
              cols = vars(target),
