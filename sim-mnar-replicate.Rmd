@@ -332,18 +332,18 @@ head(grid)
 # Run full simulation ####
 ##########################
 
-delta_seq <- seq(-6, 6, by = 1.5)
+delta_seq = seq(-6, 6, by = 1.5)
 
-minCR <- -100; maxCR <- 100
-minSR <- -100; maxSR <- 100
-lower <- c(-Inf, -Inf)
-upper <- c( Inf,  Inf)
-iter  <- 10
-true1 <- 3; true2 <- 3
+minCR = -100; maxCR <- 100
+minSR = -100; maxSR <- 100
+lower = c(-Inf, -Inf)
+upper = c( Inf,  Inf)
+iter  = 20
+true1 = 3; true2 = 3
 
 library(parallel)
 
-cl <- makeCluster(detectCores() - 1)
+cl = makeCluster(detectCores() - 1)
 
 clusterEvalQ(cl, {
   library(mixmeta); library(mvtnorm); library(systemfit); library(tmvtnorm)
@@ -356,7 +356,7 @@ clusterExport(
 )
 
 
-results_all_list <- parLapply(cl, 1:nrow(grid), function(i) {
+results_all_list = parLapply(cl, 1:nrow(grid), function(i) {
   cond <- grid[i, ]
   sim(
     seed = cond$seed,
@@ -372,32 +372,28 @@ results_all_list <- parLapply(cl, 1:nrow(grid), function(i) {
     maxSR = maxSR,
     lower = lower,
     upper = upper,
-    iter = 10,
+    iter = 20,
     true1 = true1,
     true2 = true2,
     distribution = cond$distribution
   )
 })
 
-# Chiude il cluster
 stopCluster(cl)
 
-# Unisce i risultati
-results_all <- do.call(rbind, results_all_list)
+results_all = do.call(rbind, results_all_list)
 
-# Mostra i risultati
 results_all
 
-# Inspect the results by distribution, delta, missingness, meanCR
 
-results_all$delta <- as.numeric(gsub("delta_", "", results_all$method))
+results_all$delta = as.numeric(gsub("delta_", "", results_all$method))
 
-delta_order <- sort(unique(results_all$delta))  # gives: -6, -4.5, ..., 6
-results_all$method <- factor(results_all$method, 
+delta_order = sort(unique(results_all$delta))  # gives: -6, -4.5, ..., 6
+results_all$method = factor(results_all$method, 
                              levels = paste0("delta_", delta_order))
 
 
-summary_plot <- results_all %>%
+summary_plot = results_all %>%
   group_by(distribution, meanCR, target, method) %>%
   summarise(
     mean_estCR = mean(est_CR),
@@ -481,17 +477,17 @@ library(dplyr)
 
 results_long = results_all[,c("replicate", "distribution", "target", "meanCR", "method", "est_CR")]
 
-results_long <- results_long %>%
+results_long = results_long %>%
   mutate(
     delta = as.numeric(gsub("delta_", "", method)),
     delta = factor(delta, levels = sort(unique(delta)))
   )
 
-avg_curve <- results_long %>%
+avg_curve = results_long %>%
   group_by(distribution, meanCR, target, delta) %>%
   summarise(mean_est_CR = mean(est_CR), .groups = "drop")
 
-p_list <- ggplot(results_long, aes(x = delta, y = est_CR, color = factor(replicate), group = replicate)) +
+p_list = ggplot(results_long, aes(x = delta, y = est_CR, color = factor(replicate), group = replicate)) +
   geom_point() + 
   geom_line() +
   geom_point(data = avg_curve,
@@ -511,3 +507,38 @@ print(p_list)
 
 ```
 
+#### Without uniform for better visualization
+```{r}
+summary_plot = results_all %>%
+  filter(distribution != "uniform") %>%     
+  group_by(distribution, meanCR, target, method) %>%
+  summarise(
+    mean_estCR = mean(est_CR),
+    lowerCR    = mean(pci_lb_CR),
+    upperCR    = mean(pci_ub_CR),
+    mean_estSR = mean(est_SR),
+    lowerSR    = mean(pci_lb_SR),
+    upperSR    = mean(pci_ub_SR),
+    .groups    = "drop"
+  ) %>%
+  mutate(label = paste0(distribution, "(", meanCR, ")"))
+
+
+ggplot(summary_plot, aes(x = mean_estCR, y = label)) +
+  geom_point(size = 2) +
+  geom_errorbarh(aes(xmin = lowerCR, xmax = upperCR), height = 0.25) +
+  geom_vline(xintercept = 3, linetype = "dashed", colour = "#A4031F") +
+  facet_grid(target ~ method) +
+  labs(title = "Mean CI for CR across simulation replicates\n(distributions: normal & tmvn)",
+       x = "Estimated CR", y = "Imputation Method") +
+  theme_minimal()
+
+ggplot(summary_plot, aes(x = mean_estSR, y = label)) +
+  geom_point(size = 2) +
+  geom_errorbarh(aes(xmin = lowerSR, xmax = upperSR), height = 0.25) +
+  geom_vline(xintercept = 3, linetype = "dashed", colour = "#A4031F") +
+  facet_grid(target ~ method) +
+  labs(title = "Mean CI for SR across simulation replicates\n(distributions: normal & tmvn)",
+       x = "Estimated SR", y = "Imputation Method") +
+  theme_minimal()
+```

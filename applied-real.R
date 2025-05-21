@@ -177,12 +177,12 @@ resnorm2 = genimp.mnar(
 hist(resnorm2$impCR, col = "#C64191", freq = FALSE,
      main = "All Imputed EstCR",
      xlab = "EstCR")
-curve(dnorm(x, mean=3,sd=6), add=T, col="#028090")
+curve(dnorm(x, mean=6,sd=6), add=T, col="#028090")
 
 hist(resnorm2$impSR, col = "#F0F3BD", freq = FALSE,
      main = "All Imputed EstSR",
      xlab = "EstSR")
-curve(dnorm(x, mean=3,sd=6), add=T, col="#028090")
+curve(dnorm(x, mean=6,sd=6), add=T, col="#028090")
 
 resnorm2=resnorm2$results
 
@@ -204,12 +204,12 @@ resnorm3 = genimp.mnar(
 hist(resnorm3$impCR, col = "#C64191", freq = FALSE,
      main = "All Imputed EstCR",
      xlab = "EstCR")
-curve(dnorm(x, mean=-3,sd=6), add=T, col="#028090")
+curve(dnorm(x, mean=-6,sd=10), add=T, col="#028090")
 
 hist(resnorm3$impSR, col = "#F0F3BD", freq = FALSE,
      main = "All Imputed EstSR",
      xlab = "EstSR")
-curve(dnorm(x, mean=-3,sd=6), add=T, col="#028090")
+curve(dnorm(x, mean=-6,sd=12), add=T, col="#028090")
 
 resnorm3 = resnorm3$results
 
