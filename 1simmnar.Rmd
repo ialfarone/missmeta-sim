@@ -249,13 +249,13 @@ genimp.mnar = function(df, distribution = c("uniform", "normal", "tmvn"),
 resuni = genimp.mnar(
   df = dmnar,
   distribution = "uniform",
-  iter = 1000,
+  iter = 10,
   minCR = -max(d$CR),
   maxCR = max(d$CR),
   minSR = -max(d$SR),
   maxSR = max(d$SR),
   imprho = 0.7,
-  scaleSE = 1.5
+  # scaleSE = 1.5
 )
 resuni = resuni$results
 
@@ -264,14 +264,16 @@ resuni = resuni$results
 resnorm = genimp.mnar(
   df = dmnar,
   distribution = "normal",
-  iter = 1000,
+  iter = 10,
   meanCR = 0,
   meanSR = 0,
   sdCR = 6,
   sdSR = 6,
   imprho = 0.7,
-  scaleSE = 1.5
+  # scaleSE = 1.5
 )
+
+resnorm = resnorm$results
 
 
 hist(resnorm$impCR, col = "#C64191", freq = FALSE,
@@ -295,7 +297,7 @@ resnorm2 = genimp.mnar(
   sdCR = 6,
   sdSR = 6,
   imprho = 0.7,
-  scaleSE = 1.5
+  # scaleSE = 1.5
 )
 
 
@@ -416,9 +418,9 @@ true2 = mean(b3 + RTher[, 2])
 results = rbind(
   sum.meth(resuni, true1, true2, "Uniform"),
   sum.meth(resnorm, true1, true2, "Normal(0,0)"),
-  sum.meth(resnorm2, true1, true2, "Normal(3,3)"),
-  sum.meth(resnorm3, true1, true2, "Normal(-3,-3)"),
-  sum.meth(restmvn, true1, true2, "TMVN")
+  sum.meth(resnorm2, true1, true2, "Normal(3,3)")#,
+  # sum.meth(resnorm3, true1, true2, "Normal(-3,-3)"),
+  # sum.meth(restmvn, true1, true2, "TMVN")
 )
 
 print(results)
