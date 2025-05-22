@@ -63,7 +63,6 @@ for (i in 1:S) {
 }
 
 d = do.call(rbind, data)
-
 dat = vector(mode = "list", length = S)
 
 # Calculate effect size and standard errors ####
@@ -79,6 +78,7 @@ for (s in 1:S) {
   
   dat[[s]] = data.frame(
     Study = s,
+    N = N,
     EstCR = sum$coefficients[4, 1],
     EstSR = sum$coefficients[8, 1],
     SECR = sum$coefficients[4, 2],
@@ -316,13 +316,13 @@ resnorm2=resnorm2$results
 resnorm3 = genimp.mnar(
   df = dmnar,
   distribution = "normal",
-  iter = 1000,
+  iter = 10,
   meanCR = -3,
   meanSR = -3,
   sdCR = 10,
   sdSR = 12,
-  imprho = 0.7,
-  scaleSE = 1.5
+  imprho = 0.7 #,
+  # scaleSE = 1.5
 )
 
 
