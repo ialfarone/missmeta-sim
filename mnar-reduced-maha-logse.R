@@ -285,7 +285,7 @@ sim = function(seed = NULL,
 ######################
 
 data_grid = expand.grid(
-  seed = 1:5, 
+  seed = 1:5, # Irene: to be extended to 5000 or 10^4 these are the MC reps
   distribution = c("uniform", "normal", "tmvn"),
   target = c(0.10, 0.20, 0.30),
   stringsAsFactors = FALSE
@@ -293,7 +293,7 @@ data_grid = expand.grid(
 
 uniform_tmvn = subset(data_grid, distribution != "normal")
 uniform_tmvn$meanCR = ifelse(uniform_tmvn$distribution == "uniform", 0, 1)
-# i set meanCR for multivariate normal to -3 to reflect that 'smaller' studies
+# i set meanCR for multivariate normal to 1 to reflect that 'smaller' studies
 # have been deleted
 
 uniform_tmvn$sdCR = ifelse(uniform_tmvn$distribution == "uniform", 0, 6)
@@ -342,7 +342,6 @@ clusterExport(
   envir   = .GlobalEnv
 )
 
-
 results_all_list <- parLapply(cl, 1:nrow(grid), function(i) {
   cond <- grid[i, ]
   sim(
@@ -371,8 +370,11 @@ results_all = do.call(rbind, results_all_list)
 
 results_all
 
+################################
+# Plot & summary of results ####
+################################
 
-summary_plot <- results_all %>%
+summary_plot = results_all %>%
   group_by(distribution, meanCR, meanSR, target) %>%
   summarise(
     mean_estCR = mean(est_CR),
@@ -413,7 +415,7 @@ results_summary = results_all %>%
     .groups = "drop"
   ) 
 
-results_summary <- results_summary %>%
+results_summary = results_summary %>%
   mutate(fill_grp = case_when(
     distribution == "uniform" ~ "uniform",
     distribution == "tmvn"    ~ "mean = 1",      # for CR plot
@@ -481,7 +483,7 @@ ggplot(results_summary, aes(x= distribution, y = coverage_SR, fill = fill_grp)) 
   facet_grid(~ target) +
   theme_minimal()
 
-
+# Irene: this can be refined, hic sunt leones
 ################################################################################
 # Plot all panels
 library(patchwork)
