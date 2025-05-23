@@ -49,6 +49,8 @@ genimp.mnar = function(df, iter = 100, distribution = c("uniform", "normal", "tm
       dfi$EstSR[is.na(dfi$EstSR)] = impSR
       dfi$Cor.ws[is.na(dfi$Cor.ws)] = imprho
       
+      # Irene: See here from e-mail
+      # new imputation of std.err from lognormal biv distr (see syst rev)
       
       log_sig = with(dfi[!is.na(dfi$SECR) & !is.na(dfi$SESR), ],
                       cbind(log(SECR * sqrt(N)),
@@ -65,6 +67,8 @@ genimp.mnar = function(df, iter = 100, distribution = c("uniform", "normal", "tm
       
       dfi$SECR[idx_CR] = sigma_imp[ idx_CR[miss], 1 ] / sqrt(dfi$N[idx_CR])
       dfi$SESR[idx_SR] = sigma_imp[ idx_SR[miss], 2 ] / sqrt(dfi$N[idx_SR])
+      
+      # Irene: from here same as before
       
       theta = cbind(dfi$EstCR, dfi$EstSR)
       Sigma = cbind(dfi$SECR^2,
@@ -127,7 +131,7 @@ sum.meth = function(res, true1, true2) {
 #################################
 
 scenarios = function(condition_grid, minCR, maxCR, 
-                     minSR, maxSR, lower, upper, iter = 10, 
+                     minSR, maxSR, lower, upper, iter = 100, 
                      true1 = 3, true2 = 3) {
   
   results_all = lapply(1:nrow(condition_grid), function(i) {
