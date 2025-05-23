@@ -121,12 +121,13 @@ sum.meth = function(res, true1, true2) {
   )
 }
 
+
 #################################
 # scenarios: full simulation ####
 #################################
 
 scenarios = function(condition_grid, minCR, maxCR, 
-                     minSR, maxSR, lower, upper, iter = 100, 
+                     minSR, maxSR, lower, upper, iter = 10, 
                      true1 = 3, true2 = 3) {
   
   results_all = lapply(1:nrow(condition_grid), function(i) {
@@ -269,6 +270,7 @@ sim = function(seed = NULL,
   res_sum$replicate    = seed
   res_sum$distribution = distribution
   res_sum$meanCR       = meanCR
+  res_sum$meanSR       = meanSR
   res_sum$target       = target
   
   return(res_sum)
@@ -279,17 +281,22 @@ sim = function(seed = NULL,
 ######################
 
 data_grid = expand.grid(
-  seed = 1:5000, 
+  seed = 1:5, 
   distribution = c("uniform", "normal", "tmvn"),
   target = c(0.10, 0.20, 0.30),
   stringsAsFactors = FALSE
 )
 
 uniform_tmvn = subset(data_grid, distribution != "normal")
-uniform_tmvn$meanCR = ifelse(uniform_tmvn$distribution == "uniform", 0, 3)
+uniform_tmvn$meanCR = ifelse(uniform_tmvn$distribution == "uniform", 0, 1)
+# i set meanCR for multivariate normal to -3 to reflect that 'smaller' studies
+# have been deleted
 
 uniform_tmvn$sdCR = ifelse(uniform_tmvn$distribution == "uniform", 0, 6)
-uniform_tmvn$meanSR = uniform_tmvn$meanCR
+uniform_tmvn$meanSR = ifelse(uniform_tmvn$distribution == "uniform", 0, 5)
+# i set meanCR for multivariate normal to 5 to reflect that 'bigger' studies
+# have been deleted
+
 uniform_tmvn$sdSR = ifelse(uniform_tmvn$distribution == "uniform", 0, 6)
 
 normeans = c(0, 3, -3)
@@ -362,7 +369,7 @@ results_all
 
 
 summary_plot <- results_all %>%
-  group_by(distribution, meanCR, target) %>%
+  group_by(distribution, meanCR, meanSR, target) %>%
   summarise(
     mean_estCR = mean(est_CR),
     lowerCR = mean(pci_lb_CR),
@@ -372,7 +379,7 @@ summary_plot <- results_all %>%
     upperSR = mean(pci_ub_SR),
     .groups = "drop"
   ) %>%
-  mutate(label = paste0(distribution, "(", meanCR, ")"))
+  mutate(label = paste0(distribution, "(", meanCR, ",", meanSR, ")"))
 
 ggplot(summary_plot, aes(x = mean_estCR, y = label)) +
   geom_point(size = 2) +
@@ -393,7 +400,7 @@ ggplot(summary_plot, aes(x = mean_estSR, y = label)) +
   theme_minimal()
 
 results_summary = results_all %>%
-  group_by(distribution, meanCR, target) %>%
+  group_by(distribution, meanCR, meanSR, target) %>%
   summarise(
     mean_bias_CR = mean(bias_CR),
     mean_bias_SR = mean(bias_SR),
@@ -403,14 +410,18 @@ results_summary = results_all %>%
   ) 
 
 results_summary <- results_summary %>%
-  mutate(fill_grp = ifelse(distribution == "uniform",
-                           "uniform",                  
-                           paste0("mean = ", meanCR))) 
+  mutate(fill_grp = case_when(
+    distribution == "uniform" ~ "uniform",
+    distribution == "tmvn"    ~ "mean = 1",      # for CR plot
+    TRUE                      ~ paste0("mean = ", meanCR)
+  ))
 
-my_cols <- c("mean = -3" = "#A2D729",
+
+my_cols = c("mean = -3" = "#A2D729",
              "mean = 0"  = "#33A1FD",
              "mean = 3"  = "#840032",
-             "uniform"   = "#F79824")   
+             "uniform"   = "#F79824",
+             "mean = 1"  = "#172A3A")   
 
 ggplot(results_summary,
        aes(x = distribution,
@@ -425,6 +436,16 @@ ggplot(results_summary,
   theme_minimal(base_size = 12) +
   theme(legend.position = "top",
         panel.spacing.y = unit(1, "lines"))
+
+
+results_summary <- results_summary %>%
+  mutate(fill_grp = case_when(
+    distribution == "uniform" ~ "uniform",
+    distribution == "tmvn"    ~ "mean = 5",      # for SR plot
+    TRUE                      ~ paste0("mean = ", meanSR)
+  ))
+
+my_cols["mean = 5"] <- "#5C5198"
 
 ggplot(results_summary,
        aes(x = distribution,
