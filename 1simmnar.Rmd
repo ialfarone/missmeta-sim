@@ -20,8 +20,8 @@ library(tmvtnorm)
 
 # Simulate dataset ####
 
-S = 50
-N = 100
+S = 100
+N = 1000
 
 Mu = c(0, 0)
 Tau = c(1, 1)
