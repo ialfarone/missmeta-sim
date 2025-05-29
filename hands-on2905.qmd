@@ -1,0 +1,337 @@
+---
+title: "Missing outcome imputation in bivariate meta-analysis"
+subtitle: "Psicostat Hands-On, 29 May 2025"
+author: "Irene Alfarone, Filippo Gambarota, Massimiliano Pastore"
+toc: true
+toc-depth: 2
+format:
+  revealjs:
+    code-fold: true
+    code-overflow: wrap
+    mermaid: {}
+    title-slide-attributes: 
+      data-background-image: psicostat.png, uibk.jpg
+      data-background-size: 10%, 15%
+      data-background-position: 1% 98%, 100% 98%
+---
+
+## Missing data: An overview
+
+Rubin (1976) introduced a foundational framework distinguishing missing data **mechanisms**: **Missing Completely At Random (MCAR)**, **Missing At Random (MAR)**, **Missing Not At Random (MNAR)**
+
+These mechanisms differ from **missing data patterns**, which refer to the observed structure of which values are present or absent.
+
+> Patterns = "What" is missing\
+> Mechanisms = "Why" it is missing
+
+------------------------------------------------------------------------
+
+### MCAR
+
+MCAR: Missingness is unrelated to observed or unobserved data. The missing sample is a random subsample.
+
+$$
+P(M \mid Y, \phi) = P(M \mid \phi)
+$$
+
+![](mcar.svg){fig-align="center"}
+
+------------------------------------------------------------------------
+
+### MAR
+
+MAR: Missingness depends on **observed** variables.
+
+$$
+P(M \mid Y, \phi) = P(M \mid Y_{obs}, \phi)
+$$
+
+![](mar.svg){fig-align="center"}
+
+------------------------------------------------------------------------
+
+### MNAR
+
+Missingness depends on **unobserved** variables (or both).
+
+$$
+P(M \mid Y, \phi) = P(M \mid Y_{mis}, \phi)
+$$
+
+$$
+P(M \mid Y, \phi) = P(M \mid Y_{obs}, Y_{mis}, \phi)
+$$
+
+|                                |                                |
+|--------------------------------|--------------------------------|
+| ![](mnar-foc.svg){width="308"} | ![](mnar-dif.svg){width="256"} |
+
+------------------------------------------------------------------------
+
+## Back to psychological meta-analysis
+
+Meta-analyses in psychology often combine results reported on multiple instruments:
+
+-   Correlated outcomes measuring same construct
+
+-   Some outcomes often missing
+
+------------------------------------------------------------------------
+
+#### What if outcomes are missing not at random?
+
+![](meme1.PNG){fig-align="center" width="461"}
+
+------------------------------------------------------------------------
+
+## Core Idea
+
+::: {style="font-size: 80%"}
+Replace the unobserved outcomes with many plausible draws, then meta-analyse each imputed dataset and pool the results with Rubin's rules.
+
+1.  **Assume several donor distributions**
+
+-   e.g., Uniform, Normal, Multivariate Normal (truncated)
+
+2.  **Repeated stochastic *single* imputation**
+
+-   For every Monte-Carlo replicate
+    1.  Draw missing effect estimates, SEs, and within-study cor
+    2.  Fit a bivariate random-effects model (e.g., with `mixmeta`)
+    3.  Store coefficients & vcov
+:::
+
+------------------------------------------------------------------------
+
+3.  **Combine with Rubin’s rules**
+    -   Pool point estimates, between- & within-replicate variance
+    -   Obtain bias, SE, CI coverage across replicates
+4.  **Evaluation**
+    -   Bias and Coverage
+    -   Sensitivity analysis for the estimates under different assumptions
+    -   Easily interpretable plots with *uncertainty* intervals
+
+------------------------------------------------------------------------
+
+## Simulation study
+
+-   50 studies × 100 subjects each
+-   Outcomes:
+    -   CR = Clinician Rating
+    -   SR = Self Report
+-   Estimates via Seemingly Unrelated Regression (SUR)
+
+------------------------------------------------------------------------
+
+### Missingness Mechanism (MNAR)
+
+-   Logistic models on effect size estimates
+-   Missingness depends on CR (positive bias) or SR (negative bias)
+
+|                                      |                                      |
+|------------------------------------|------------------------------------|
+| ![](images/clipboard-2272811910.png) | ![](images/clipboard-1992106080.png) |
+
+------------------------------------------------------------------------
+
+### Imputation Strategy
+
+::: {style="font-size: 80%"}
+Distributions:
+
+-   Uniform: range
+
+-   Normal: Mean & SD specified
+
+-   TMVN: Truncated multivariate normal
+:::
+
+``` r
+genimp = function(df, iter = 100,
+                   imp1, imp2,
+                   eff1 = "Eff1", eff2 = "Eff2",
+                   se1 = "SE1", se2 = "SE2",
+                   cor = "Cor.ws", N = "N",
+                   imprho = 0.7) {
+  results = vector("list", iter)
+  
+  for (i in seq_len(iter)) {
+    dfi = df
+    Nmiss1 = sum(is.na(dfi[[eff1]]))
+    Nmiss2 = sum(is.na(dfi[[eff2]]))
+    
+    dfi[[eff1]][is.na(dfi[[eff1]])] = imp1(Nmiss1)
+    dfi[[eff2]][is.na(dfi[[eff2]])] = imp2(Nmiss2)
+    dfi[[cor]][is.na(dfi[[cor]])] = imprho
+    
+    comp = !is.na(dfi[[se1]]) & !is.na(dfi[[se2]])
+    log_sig = cbind(
+      log(dfi[[se1]][comp] * sqrt(dfi[[N]][comp])),
+      log(dfi[[se2]][comp] * sqrt(dfi[[N]][comp]))
+    )
+    
+    
+    mu_hat    = colMeans(log_sig)
+    Sigma_hat = var(log_sig)     
+    
+    miss = is.na(dfi[[se1]]) | is.na(dfi[[se2]])
+    log_draw  = mvtnorm::rmvnorm(sum(miss), mean = mu_hat, sigma = Sigma_hat)
+    sigma_imp = exp(log_draw)    
+    
+    idx_se1 = which(miss & is.na(dfi[[se1]]))
+    idx_se2 = which(miss & is.na(dfi[[se2]]))
+    
+    dfi[[se1]][idx_se1] = sigma_imp[seq_along(idx_se1), 1] / sqrt(dfi[[N]][idx_se1])
+    dfi[[se2]][idx_se2] = sigma_imp[seq_along(idx_se2), 2] / sqrt(dfi[[N]][idx_se2])
+    
+    results[[i]] <- dfi
+  }
+  
+  results
+}
+```
+
+### Pooling with Rubin's rules
+
+After performing the chosen analysis on each imputed dataset, results from the bivariate meta-analysis are pooled using a procedure proposed by Rubin.
+
+``` r
+sum.meth = function(res, true1, true2) {
+  m = nrow(res)
+  Q_mat = cbind(res$eff1, res$eff2)
+  Q_bar = colMeans(Q_mat)
+  B = cov(Q_mat)
+  
+  U_list = lapply(1:m, function(i) {
+    matrix(c(res$se1[i]^2, res$cov[i], res$cov[i], res$se2[i]^2), nrow = 2)
+  })
+  U_bar = Reduce("+", U_list) / m
+  Tmat = U_bar + (1 + 1/m) * B
+  se = sqrt(diag(Tmat))
+  
+  df = (m - 1) * (1 + diag(U_bar) / ((1 + 1/m) * diag(B)))^2
+  
+  ci1 = Q_bar[1] + c(-1, 1) * qt(0.975, df[1]) * se[1]
+  ci2 = Q_bar[2] + c(-1, 1) * qt(0.975, df[2]) * se[2]
+  
+  data.frame(
+    est_CR = Q_bar[1], est_SR = Q_bar[2],
+    bias_CR = Q_bar[1] - true1,
+    bias_SR = Q_bar[2] - true2,
+    cover_CR = as.numeric(ci1[1] <= true1 && true1 <= ci1[2]),
+    cover_SR = as.numeric(ci2[1] <= true2 && true2 <= ci2[2]),
+    pci_lb_CR = ci1[1], pci_ub_CR = ci1[2],
+    pci_lb_SR = ci2[1], pci_ub_SR = ci2[2]
+  )
+}
+```
+
+## Cuijpers et al. (2010)
+
+::: {style="font-size: 75%"}
+Cuijpers and colleagues collected data from 48 studies that measure depression on both a clinician rating (HRSD) and self-report scale (BDI).
+
+The meta-analysis highlights a substantial difference between the patients’ and clinicians’ evaluations of depression, in favor of the clinician rating.
+:::
+
+![](images/clipboard-2624184438.png){fig-align="center"}
+
+------------------------------------------------------------------------
+
+### The dataset
+
+::: {style="font-size: 80%"}
+We analyze a subset of studies that report either the HRSD (CR scale for depression) or the BDI (SR scale for depression).
+
+Correlation between the HRSD and BDI is set at $\rho = 0.7$ (yes, we could perform sensitivity analyses also for this...)
+:::
+
+::: middle
+```{r, echo=FALSE}
+library(readxl)
+library(readxl)
+library(dplyr)
+library(mixmeta)
+library(tmvtnorm)
+library(ggplot2)
+
+d = read_xlsx("cujipersetal-data2.xlsx", sheet = "Sheet2")
+
+d <- d %>%
+  mutate(
+    across(c(-Study, -Psychotherapy), as.numeric),
+    MissHRSD=ifelse(is.na(`T-HRSD-M-Post`), "0", "1"),
+    MissBDI=ifelse(is.na(`T-BDI-M-Post`), "0", "1"),
+    across(c(Psychotherapy), as.factor)
+  )
+
+df <- d[-c(2, 4, 7, 13, 17, 19, 21, 27, 31, 34, 36, 37, 38, 45, 48, 56, 58, 59),]
+
+df$EstSR <- df$`T-BDI-M-Post` - df$`C-BDI-M-Post`
+df$EstCR <- df$`T-HRSD-M-Post` - df$`C-HRSD-M-Post`
+
+Spooled <- function(Nt, sdt, Nc, sdc)
+{
+  sqrt(((Nt-1)*sdt^2 + (Nc-1)*sdc^2)/((Nt-1)+(Nc-1)))
+}
+
+BDI_sp <- Spooled(df$Nt, df$`T-BDI-SD-Post`, df$Nc, df$`C-BDI-SD-Post`)
+df$SESR <- BDI_sp * sqrt((1/df$Nt)+(1/df$Nc))
+
+
+HRSD_sp <- Spooled(df$Nt, df$`T-HRSD-SD-Post`, df$Nc, df$`C-HRSD-SD-Post`)
+df$SECR <- HRSD_sp * sqrt((1/df$Nt)+(1/df$Nc))
+
+
+dmnar = df[,c("Study", "N", "EstCR", "SECR", "EstSR", "SESR")]
+dmnar$Cor.ws = 0.7
+dmnar$Cor.ws[is.na(dmnar$EstCR) | is.na(dmnar$EstSR)] = NA
+head(dmnar)
+
+
+```
+:::
+
+------------------------------------------------------------------------
+
+### Multivariate meta-analysis
+
+Performed with `mixmeta`, comparable results also with `metaSEM`.
+
+```{r, echo=FALSE}
+
+library(missmeta)
+cor = 0.7 # Correlation of the outcomes (from the literature)
+theta = cbind(dmnar$EstCR, dmnar$EstSR)
+Sigma = cbind(dmnar$SECR^2, CorCov(dmnar$SECR, dmnar$SESR, cor), dmnar$SESR^2)
+
+mvDEPR <- mixmeta(theta, Sigma, method="reml")
+summary(mvDEPR)
+
+```
+
+------------------------------------------------------------------------
+
+### What if the outcomes are MNAR?
+
+::: {style="font-size: 80%"}
+
+Then we imputed the missing HRSD and BDI outcomes with random draws from selected distribution (uniform, multivariate normal, normal) to reflect different assumptions on the missingness mechanisms.
+
+The goal is to explore if the results are robust across assumptions (more or less conservative).
+
+:::
+
+::: middle
+|                                     |                                      |
+|-----------------------------------|------------------------------------|
+| ![](images/clipboard-961025248.png) | ![](images/clipboard-2410094704.png) |
+:::
+
+------------------------------------------------------------------------
+
+### SPOILER!1!!1
+
+It will be (soon) available an R package that allows the user to perform multivariate meta-analysis choices with different packages and choose her favourite distributions!
+
+![](github.png){fig-align="center"}

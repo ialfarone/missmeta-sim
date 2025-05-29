@@ -490,7 +490,7 @@ library(patchwork)
 
 library(tidyr)
 
-results_long = results_all[,c("replicate", "distribution", "target", "meanCR", "est_CR", "est_SR")]
+results_long = res[,c("nsim", "distribution", "target", "meanCR", "est_CR", "est_SR")]
 
 avg_curve <- results_long %>%
   group_by(distribution, meanCR, target) %>%
@@ -569,3 +569,9 @@ results_mc_summary <- results_all %>%
                            "uniform",
                            paste0("mean = ", meanCR)))
 results_mc_summary
+#############
+
+
+res = readRDS("sim_res.rds")
+res
+head(res)

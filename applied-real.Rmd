@@ -346,7 +346,7 @@ ggplot(results, aes(x = method)) +
   coord_flip() +
   labs(
     title = "Uncertainty Intervals for SR",
-    x = "Method", y = "CR Interval"
+    x = "Method", y = "SR Interval"
   ) +
   theme_minimal()
 ```
