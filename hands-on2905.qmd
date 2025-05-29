@@ -137,14 +137,9 @@ Replace the unobserved outcomes with many plausible draws, then meta-analyse eac
 ### Imputation Strategy
 
 ::: {style="font-size: 80%"}
-Distributions:
 
--   Uniform: range
-
--   Normal: Mean & SD specified
-
--   TMVN: Truncated multivariate normal
-:::
+We impute the datasets with random draws from pre-specified distributions 
+`imp1` and `imp2`, repeated `iter = 100` times.
 
 ``` r
 genimp = function(df, iter = 100,
@@ -190,10 +185,14 @@ genimp = function(df, iter = 100,
   results
 }
 ```
+:::
+-----
 
 ### Pooling with Rubin's rules
 
+::: {style="font-size: 70%"}
 After performing the chosen analysis on each imputed dataset, results from the bivariate meta-analysis are pooled using a procedure proposed by Rubin.
+:::
 
 ``` r
 sum.meth = function(res, true1, true2) {

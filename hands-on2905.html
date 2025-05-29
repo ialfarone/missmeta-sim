@@ -219,6 +219,7 @@ Irene Alfarone, Filippo Gambarota, Massimiliano Pastore
 <li><a href="#/simulation-study" id="/toc-simulation-study">Simulation study</a></li>
 
 
+
 <li><a href="#/cuijpers-et-al.-2010" id="/toc-cuijpers-et-al.-2010">Cuijpers et al.&nbsp;(2010)</a></li>
 
 
@@ -362,13 +363,7 @@ P(M \mid Y, \phi) = P(M \mid Y_{obs}, Y_{mis}, \phi)
 
 <h3 id="imputation-strategy">Imputation Strategy</h3>
 <div style="font-size: 80%">
-<p>Distributions:</p>
-<ul>
-<li><p>Uniform: range</p></li>
-<li><p>Normal: Mean &amp; SD specified</p></li>
-<li><p>TMVN: Truncated multivariate normal</p></li>
-</ul>
-</div>
+<p>We impute the datasets with random draws from pre-specified distributions <code>imp1</code> and <code>imp2</code>, repeated <code>iter = 100</code> times.</p>
 <div class="sourceCode" id="cb1"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb1-1"><a href=""></a>genimp <span class="ot">=</span> <span class="cf">function</span>(df, <span class="at">iter =</span> <span class="dv">100</span>,</span>
 <span id="cb1-2"><a href=""></a>                   imp1, imp2,</span>
 <span id="cb1-3"><a href=""></a>                   <span class="at">eff1 =</span> <span class="st">"Eff1"</span>, <span class="at">eff2 =</span> <span class="st">"Eff2"</span>,</span>
@@ -411,8 +406,14 @@ P(M \mid Y, \phi) = P(M \mid Y_{obs}, Y_{mis}, \phi)
 <span id="cb1-40"><a href=""></a>  </span>
 <span id="cb1-41"><a href=""></a>  results</span>
 <span id="cb1-42"><a href=""></a>}</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+</section>
+<section class="slide level2">
+
 <h3 id="pooling-with-rubins-rules">Pooling with Rubin’s rules</h3>
+<div style="font-size: 70%">
 <p>After performing the chosen analysis on each imputed dataset, results from the bivariate meta-analysis are pooled using a procedure proposed by Rubin.</p>
+</div>
 <div class="sourceCode" id="cb2"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb2-1"><a href=""></a>sum.meth <span class="ot">=</span> <span class="cf">function</span>(res, true1, true2) {</span>
 <span id="cb2-2"><a href=""></a>  m <span class="ot">=</span> <span class="fu">nrow</span>(res)</span>
 <span id="cb2-3"><a href=""></a>  Q_mat <span class="ot">=</span> <span class="fu">cbind</span>(res<span class="sc">$</span>eff1, res<span class="sc">$</span>eff2)</span>
