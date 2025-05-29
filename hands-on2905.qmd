@@ -1,5 +1,5 @@
 ---
-title: "Missing outcome imputation in bivariate meta-analysis"
+title: "Missing outcomes imputation in bivariate meta-analysis"
 subtitle: "Psicostat Hands-On, 29 May 2025"
 author: "Irene Alfarone, Filippo Gambarota, Massimiliano Pastore"
 toc: true
@@ -315,11 +315,9 @@ summary(mvDEPR)
 ### What if the outcomes are MNAR?
 
 ::: {style="font-size: 80%"}
-
 Then we imputed the missing HRSD and BDI outcomes with random draws from selected distribution (uniform, multivariate normal, normal) to reflect different assumptions on the missingness mechanisms.
 
 The goal is to explore if the results are robust across assumptions (more or less conservative).
-
 :::
 
 ::: middle
@@ -335,3 +333,9 @@ The goal is to explore if the results are robust across assumptions (more or les
 It will be (soon) available an R package that allows the user to perform multivariate meta-analysis choices with different packages and choose her favourite distributions!
 
 ![](github.png){fig-align="center"}
+
+------------------------------------------------------------------------
+
+### Grazie mille!
+
+![](images/clipboard-3118820438.png){fig-align="center" width="1787"}
