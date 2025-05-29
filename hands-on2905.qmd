@@ -338,4 +338,4 @@ It will be (soon) available an R package that allows the user to perform multiva
 
 ### Grazie mille!
 
-![](images/clipboard-3118820438.png){fig-align="center" width="1787"}
+![](images/clipboard-3118820438.png){fig-align="center"}
