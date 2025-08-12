@@ -210,3 +210,191 @@ out <- genimp(df = dmnar,
               N = "N",
               imprho = 0.3)
 out
+
+###############
+# sum.meth ####
+###############
+
+library(mixmeta)
+library(missmeta)
+
+results = lapply(out, function(data) {
+  theta = cbind(data$EstCR, data$EstSR)
+  Sigma = cbind(data$SECR^2, CorCov(data$SECR, data$SESR, data$Cor.ws), data$SESR^2)
+  
+  m = mixmeta(theta, S = Sigma, method = "reml")
+  s = summary(m)
+  ci = confint(m)
+  
+  results = data.frame(
+  eff1 = s$coefficients[1,1],
+  eff2 = s$coefficients[2,1],
+  se1 = s$coefficients[1, 2],
+  se2 = s$coefficients[2, 2],
+  cov = s$vcov[1, 2],
+  ci.lb1 = ci[1, 1], ci.ub1 = ci[1, 2],
+  ci.lb2 = ci[2, 1], ci.ub2 = ci[2, 2]
+  )
+  
+})
+
+results
+res = do.call(rbind, results)
+
+sum.meth = function(eff1, eff2, se1, se2, cov12, method) {
+  m = length(eff1)
+  Q_mat = cbind(eff1, eff2)
+  Q_bar = colMeans(Q_mat)
+  B = cov(Q_mat)
+  
+  U_list = lapply(1:m, function(i) {
+    matrix(c(se1[i]^2, cov[i], cov[i], se2[i]^2), nrow = 2)
+  })
+  U_bar = Reduce("+", U_list) / m
+  Tmat = U_bar + (1 + 1/m) * B
+  se = sqrt(diag(Tmat))
+  
+  df = (m - 1) * (1 + diag(U_bar) / ((1 + 1/m) * diag(B)))^2
+  
+  ci1 = Q_bar[1] + c(-1, 1) * qt(0.975, df[1]) * se[1]
+  ci2 = Q_bar[2] + c(-1, 1) * qt(0.975, df[2]) * se[2]
+  
+  df = data.frame(
+    method = method,
+    eff1 = Q_bar[1], eff2 = Q_bar[2],
+    ci1_lb = ci1[1], ci1_ub = ci1[2],
+    ci2_lb = ci2[1], ci2_ub = ci2[2]
+  )
+  
+  print(df, row.names = F)
+
+}
+
+sum.meth(eff1 = res$eff1, eff2 = res$eff2, 
+         se1 = res$se1, se2 = res$se2, 
+         cov = res$cov, method = "Normal (1, 6)")
+
+
+
+################################
+# Generalization to multivariate
+################################
+
+library(mvtnorm)
+
+# Dummy imputation functions for effects
+imp1 = function(n) rnorm(n, 0, 1)
+imp2 = function(n) rnorm(n, 1, 1)
+imp3 = function(n) rnorm(n, 2, 1)
+imps = list(imp1, imp2, imp3)
+
+# Create a small dataset
+set.seed(123)
+df = data.frame(
+  eff1 = c(0.5, NA, 0.3, 0.7, 0.5),
+  eff2 = c(NA, 0.2, 0.3, 0.4, 0.2),
+  eff3 = c(0.1, 0.2, NA, 0.4, 0.9),
+  se1  = c(0.1, NA, 0.2, 0.15, .1),
+  se2  = c(NA, 0.25, 0.2, 0.2, .4),
+  se3  = c(0.05, 0.1, NA, 0.15, .4),
+  cor12 = c(NA, NA, 0.5, 0.7, .6),
+  cor13 = c(0.3, NA, NA, 0.6, .6),
+  cor23 = c(NA, 0.3, NA, 0.5, .6),
+  N = c(50, 60, 55, 45, 100)
+)
+
+df
+
+genimp_multi <- function(df, iter = 100,
+                         imps,
+                         effs,
+                         ses,
+                         cors = NULL, 
+                         Ns = "N",
+                         imprho = 0.7) {
+  K <- length(effs)
+  results <- vector("list", iter)
+  
+  for (i in seq_len(iter)) {
+    dfi <- df
+    
+    for (k in seq_along(effs)) {
+      eff <- effs[k]
+      Nmiss <- sum(is.na(dfi[[eff]]))
+      if (Nmiss > 0) {
+        dfi[[eff]][is.na(dfi[[eff]])] <- imps[[k]](Nmiss)
+      }
+    }
+    
+      if (length(imprho) == 1) {
+        imprho_vec <- rep(imprho, length(cors))
+      } else if (length(imprho) == length(cors)) {
+        imprho_vec <- imprho
+      } else {
+        stop("imprho must be a scalar or a vector with length equal to cors.")
+      }
+      
+      for (idx in seq_along(cors)) {
+        cor <- cors[idx]
+        cor_val <- imprho_vec[idx]
+        dfi[[cor]][is.na(dfi[[cor]])] <- cor_val
+      }
+
+    
+      comp <- complete.cases(dfi[, ses])
+    if (sum(comp) < 2) {
+      stop("Not enough complete cases to estimate covariance for standard errors.")
+    }
+    
+    log_sig <- sapply(ses, function(se) {
+      log(dfi[[se]][comp] * sqrt(dfi[[Ns]][comp]))
+    })
+    
+    if (is.vector(log_sig)) {
+      log_sig <- matrix(log_sig, ncol = length(ses))
+    }
+    
+    mu_hat <- colMeans(log_sig)
+    Sigma_hat <- var(log_sig)
+    
+    miss <- !complete.cases(dfi[, ses])
+    nmiss <- sum(miss)
+    
+    if (nmiss > 0) {
+      log_draw <- mvtnorm::rmvnorm(nmiss, mean = mu_hat, sigma = Sigma_hat)
+      sigma_imp <- exp(log_draw)
+      
+      idx_miss <- which(miss)
+      for (k in seq_along(ses)) {
+        idx_se <- idx_miss[is.na(dfi[[ses[k]]][idx_miss])]
+        if (length(idx_se) > 0) {
+          dfi[[ses[k]]][idx_se] <- sigma_imp[seq_along(idx_se), k] / sqrt(dfi[[Ns]][idx_se])
+        }
+      }
+    }
+    
+    results[[i]] <- dfi
+  }
+  
+  results
+}
+
+
+imputed_data <- genimp_multi(
+  df,
+  iter = 10,
+  imps = imps,
+  effs = c("eff1", "eff2", "eff3"),
+  ses = c("se1", "se2", "se3"),
+  cors = c("cor12", "cor13", "cor23"),
+  Ns = "N",
+  imprho = c(0.7, 0.5, 0.6)  
+)
+
+imputed_data
+
+
+## sum_meth_multi
+
+
+

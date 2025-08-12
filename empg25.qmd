@@ -1,0 +1,692 @@
+---
+title: "Missing outcomes imputation in bivariate meta-analysis"
+subtitle: "Padova EMPG Conference, 3 September 2025"
+author: "Irene Alfarone, Filippo Gambarota, Massimiliano Pastore"
+toc: true
+toc-depth: 2
+format:
+  revealjs:
+    code-fold: true
+    code-overflow: wrap
+    mermaid: {}
+    title-slide-attributes: 
+      data-background-image: psicostat.png, empg.png, uibk.jpg,
+      data-background-size: 7%, 10%, 15%
+      data-background-position: 1% 98%, 50% 98%, 100% 98%
+bibliography: references.bib
+---
+
+## Meta-analysis in psychology
+
+-   A statistical technique to **quantitatively summarize** the results of **multiple studies** to derive a **more precise effect estimate**.
+
+-   Various sources of **heterogeneity**: clinical, methodological, statistical
+
+------------------------------------------------------------------------
+
+### Multivariate meta-analysis
+
+::::::: {layout="[70,30]"}
+::::: {style="text-align: left;"}
+:::: {style="font-size: 95%"}
+<div>
+
+> “\[…\] many clinical studies have more than one outcome variable; this is the norm rather than the exception. These variables are seldom independent and so each must carry some information about the others. If we can use this information, we should.” [@bland2011]
+
+</div>
+::::
+:::::
+
+::: {style="text-align: center;"}
+![](images/multi-meta.jpg){width="200"}
+:::
+:::::::
+
+------------------------------------------------------------------------
+
+### Multivariate meta-analysis in psychology
+
+Many psychological studies report multiple outcomes [@tyler2011]
+
+-   MVMA allows for a joint estimation [@riley2017]
+
+-   MVMA handles outcomes missing "by design" [@jackson2017]
+
+------------------------------------------------------------------------
+
+## Missing data
+
+::: {style="font-size: 80%"}
+@rubin1976 introduced a foundational framework distinguishing missing data **mechanisms**: **Missing Completely At Random (MCAR)**, **Missing At Random (MAR)**, **Missing Not At Random (MNAR)**
+
+These mechanisms differ from **missing data patterns**, which refer to the observed structure of which values are present or absent.
+
+> Patterns = "What" is missing\
+> Mechanisms = "Why" it is missing
+:::
+
+![](images/cheese-miss.png){fig-align="center" width="1254"}
+
+------------------------------------------------------------------------
+
+### Missing Completely At Random
+
+::: {style="font-size: 80%"}
+MCAR: Missingness is unrelated to observed or unobserved data. The missing sample is a random subsample.
+
+$$
+P(M \mid Y, \phi) = P(M \mid \phi)
+$$
+:::
+
+![](images/MCAR.png){fig-align="center" width="3355"}
+
+------------------------------------------------------------------------
+
+### Missing At Random
+
+::: {style="font-size: 80%"}
+MAR: Missingness depends on **observed** variables.
+
+$$
+P(M \mid Y, \phi) = P(M \mid Y_{obs}, \phi)
+$$
+:::
+
+![](images/MAR.png){fig-align="center"}
+
+------------------------------------------------------------------------
+
+### Missing Not At Random
+
+::: {style="font-size: 80%"}
+MNAR: Missingness depends on **unobserved** variables (or both).
+
+$$                                                                
+ P(M \mid Y, \phi) = P(M \mid Y_{mis}, \phi)                          
+$$
+
+$$                                                                  
+ P(M \mid Y, \phi) = P(M \mid Y_{obs}, Y_{mis}, \phi)                 
+$$
+:::
+
+![](images/MNAR.png){fig-align="center"}
+
+------------------------------------------------------------------------
+
+## Multivariate meta-analysis and sensitivity analysis
+
+-   What about MNAR outcome measures?
+
+-   Pre-existing work on imputation of summary-level missing data [@lu2023; @carpenter2007; @viechtbauer2022]
+
+-   Delta-adjustment following multiple imputation of missing outcome [@fiero2017]
+
+------------------------------------------------------------------------
+
+## Core Idea
+
+::: {style="font-size: 80%"}
+Replace the unobserved outcomes with many plausible draws, then meta-analyse each imputed dataset and pool the results with Rubin's rules.
+
+1.  **Assume several donor distributions**
+
+-   e.g., Uniform, Normal, Multivariate Normal
+
+2.  **Repeated stochastic *single* imputation**
+
+-   In each iteration
+    1.  Draw missing effect estimates, SEs, and within-study cor
+    2.  Fit a bivariate random-effects model (e.g., with `mixmeta`)
+    3.  Store coefficients and vcov
+:::
+
+------------------------------------------------------------------------
+
+3.  **Combine with Rubin’s rules**
+    -   Pool point estimates, between- & within-replicate variance
+    -   Obtain bias, SE, CI coverage across replicates
+4.  **Evaluation**
+    -   Bias and Coverage
+    -   Sensitivity analysis for the estimates under different assumptions
+    -   Easily interpretable plots with *uncertainty* intervals
+
+------------------------------------------------------------------------
+
+## Simulation study
+
+-   50 studies, each with 100 participants
+-   Two continuous outcomes:
+    -   **CR**: Clinician Rating
+    -   **SR**: Self-Report
+-   Predictors: age, sex, treatment assignment
+-   Random effects: bivariate normal with $\rho = 0.7$
+-   Estimates obtained via Seemingly Unrelated Regression (SUR) [@zellner1962; @riley2021]
+
+------------------------------------------------------------------------
+
+#### MNAR mechanism
+
+::: {style="font-size: 80%"}
+-   Missingness based on effect size estimates:
+    -   **CR**: more likely missing when treatment effect is **low**
+    -   **SR**: more likely missing when treatment effect is **high**
+-   Conflict resolution: keep the one **furthest from the mean**
+:::
+
+|                                      |                                      |
+|------------------------------------|------------------------------------|
+| ![](images/clipboard-2272811910.png) | ![](images/clipboard-1992106080.png) |
+
+------------------------------------------------------------------------
+
+### Imputation distributions
+
+Missing outcomes were drawn from one of three distributions:
+
+1.  **Normal** with mean $\in {−3, 0, 3}$
+2.  **Truncated multivariate normal (tmvn)** with mean = (1, 5)
+3.  **Uniform** distribution from −100 to 100
+
+Each condition was repeated **10,000 times**, with:
+
+-   Single stochastic imputation (×100)
+-   Bivariate random-effects meta-analysis using `mixmeta`
+-   Pooled estimates and variances via **Rubin's rule**
+
+------------------------------------------------------------------------
+
+#### Estimated CR with 95% CI
+
+```{r echo=FALSE, fig.height=5.5}
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+res <- readRDS("sim0907.rds")
+
+combined_df <- res %>%
+  mutate(sim_id = row_number()) %>%
+  unnest(res, names_sep = "_") %>%
+  group_by(distribution, target, meanCR)
+
+restot <- combined_df %>%
+  group_by(distribution, target, meanCR) %>%
+  group_split() %>%
+  bind_rows()
+
+restot$method <- paste(restot$distribution, restot$meanCR, restot$meanSR, sep = ", ")
+
+sum_plot <- restot %>%    
+  group_by(distribution, meanCR, meanSR, target, method) %>%
+  summarise(
+    mean_estCR = mean(res_est_CR),
+    lowerCR    = mean(res_pci_lb_CR),
+    upperCR    = mean(res_pci_ub_CR),
+    mean_estSR = mean(res_est_SR),
+    lowerSR    = mean(res_pci_lb_SR),
+    upperSR    = mean(res_pci_ub_SR),
+    .groups    = "drop"
+  ) %>%
+  mutate(
+    label = paste0(distribution, "(", meanCR, "," , meanSR, ")"),
+    target_lab = case_when(
+      target == 0.1 ~ "10%",
+      target == 0.2 ~ "20%",
+      target == 0.3 ~ "30%"
+    )
+  )
+
+# Filter for 30% missingness
+sum_plot_30 <- sum_plot %>% filter(target_lab == "30%")
+
+# Horizontal plot
+ggplot(sum_plot_30, aes(y = factor(meanCR), x = mean_estCR, color = distribution, group = distribution)) +
+  geom_point(position = position_dodge(width = 0.4), size = 2.5) +
+  geom_errorbarh(aes(xmin = lowerCR, xmax = upperCR),
+                 position = position_dodge(width = 0.4), height = 0.25, size = 1.2) +
+  geom_vline(xintercept = 3, linetype = "dashed", color = "gray40", size = 1) +
+  labs(
+    title = "Estimated CR with 95% CI (30% missingness)",
+    y = "Mean of imputation distribution (CR)",
+    x = "Estimated CR",
+    color = "Distribution"
+  ) +
+  scale_color_manual(values = c("normal" = '#B74F6F', "tmvn" = '#307473', "uniform" = '#F18805')) +
+  theme_minimal(base_size = 14)
+```
+
+------------------------------------------------------------------------
+
+#### Estimated SR with 95% CI
+
+```{r echo=FALSE, fig.height=5.5}
+ggplot(sum_plot_30, aes(y = factor(meanSR), x = mean_estSR, color = distribution, group = distribution)) +
+  geom_point(position = position_dodge(width = 0.4), size = 2.5) +
+  geom_errorbarh(aes(xmin = lowerSR, xmax = upperSR),
+                 position = position_dodge(width = 0.4),
+                 height = 0.25, size = 1.2) + # thicker error bars
+  geom_vline(xintercept = 3, linetype = "dashed", color = "gray40", size = 1) +
+  labs(
+    title = "Estimated SR with 95% CI (30% missingness)",
+    y = "Mean of imputation distribution (SR)",
+    x = "Estimated SR",
+    color = "Distribution"
+  ) +
+  scale_color_manual(values = c("normal" = '#B74F6F', 
+                                "tmvn" = '#307473', 
+                                "uniform" = '#F18805')) +
+  theme_minimal(base_size = 14)
+
+```
+
+------------------------------------------------------------------------
+
+#### Bias and Coverage for CR and SR
+
+```{r echo=FALSE, table.height=0.5}
+library(knitr)
+library(kableExtra)
+
+bias_coverage_table <- restot %>%
+  filter(target == 0.3) %>%   
+  group_by(distribution, meanCR, meanSR, target) %>%
+  summarise(
+    Bias_CR   = round(mean(res_bias_CR), 2),
+    Bias_SR   = round(mean(res_bias_SR), 2),
+    Cover_CR  = round(mean(res_cover_CR), 3),
+    Cover_SR  = round(mean(res_cover_SR), 3),
+    .groups   = "drop"
+  ) %>%
+  arrange(distribution, target, meanCR) %>%
+  mutate(
+    Missingness = paste0(target * 100, "%"),
+    Imputation  = paste0(distribution, " (", meanCR, ", ", meanSR, ")")
+  ) %>%
+  select(Imputation, Bias_CR, Cover_CR, Bias_SR, Cover_SR)
+
+# Display the table nicely
+bias_coverage_table %>%
+  kbl(
+    caption = "Bias and 95% CI Coverage for CR and SR by Imputation Distribution and Missingness",
+    align = "cccccc",
+    col.names = c("Imputation", "Bias (CR)", "Coverage (CR)", "Bias (SR)", "Coverage (SR)")
+  ) %>%
+  kable_styling(font_size = 20, full_width = TRUE, bootstrap_options = c("striped", "hover")) 
+```
+
+::: {style="font-size: 80%"}
+-   Bias depends on missingness rule
+
+-   Imputation from **uniform** distributions are **conservative** but **imprecise**
+
+-   Imputation from **truncate multivariate normal** best performance, but relies on true **model** **knowledge**
+
+-   In **real data** multiple assumptions should be **test**ed
+:::
+
+------------------------------------------------------------------------
+
+## Application to real data
+
+::: {style="font-size: 75%"}
+@cuijpers2010 collected data from 48 studies that measure depression on both a clinician rating (HRSD; @hamilton1960) and self-report scale (BDI; @beck1961). The meta-analysis highlights a substantial difference between the patients’ and clinicians’ evaluations of depression, in favor of the clinician rating.
+:::
+
+![](images/clipboard-2624184438.png){fig-align="center"}
+
+------------------------------------------------------------------------
+
+### The dataset
+
+::: {style="font-size: 80%"}
+-   37 studies from Appendix A (HRSD-17 and BDI outcomes, single control group, data from METAPSY database)
+
+-   **3 studies** lacked post-treatment data
+
+-   For multiple comparisons per study:
+
+    -   Retained the **highest mean difference**
+    -   **BDI** used to break ties
+:::
+
+```{r, echo = FALSE}
+library(readxl)
+library(dplyr)
+
+d = read_xlsx("cujipersetal-data2.xlsx", sheet = "Sheet2")
+
+d <- d %>%
+  mutate(
+    across(c(-Study, -Psychotherapy), as.numeric),
+    MissHRSD=ifelse(is.na(`T-HRSD-M-Post`), "0", "1"),
+    MissBDI=ifelse(is.na(`T-BDI-M-Post`), "0", "1"),
+    across(c(Psychotherapy), as.factor)
+  )
+
+df <- d[-c(2, 4, 7, 13, 17, 19, 21, 27, 31, 34, 36, 37, 38, 45, 48, 56, 58, 59),]
+
+df$EstSR <- df$`T-BDI-M-Post` - df$`C-BDI-M-Post`
+df$EstCR <- df$`T-HRSD-M-Post` - df$`C-HRSD-M-Post`
+
+Spooled <- function(Nt, sdt, Nc, sdc)
+{
+  sqrt(((Nt-1)*sdt^2 + (Nc-1)*sdc^2)/((Nt-1)+(Nc-1)))
+}
+
+BDI_sp <- Spooled(df$Nt, df$`T-BDI-SD-Post`, df$Nc, df$`C-BDI-SD-Post`)
+df$SESR <- BDI_sp * sqrt((1/df$Nt)+(1/df$Nc))
+
+
+HRSD_sp <- Spooled(df$Nt, df$`T-HRSD-SD-Post`, df$Nc, df$`C-HRSD-SD-Post`)
+df$SECR <- HRSD_sp * sqrt((1/df$Nt)+(1/df$Nc))
+
+dmnar = df[,c("Study", "N", "EstCR", "SECR", "EstSR", "SESR")]
+dmnar$Cor.ws = 0.7
+dmnar$Cor.ws[is.na(dmnar$EstCR) | is.na(dmnar$EstSR)] = NA
+head(dmnar)
+```
+
+------------------------------------------------------------------------
+
+### Impute missing outcome measures using the package missmeta
+
+![](images/missmetagit.png){fig-align="center"}
+
+------------------------------------------------------------------------
+
+#### Prepare distributions
+
+::: {style="font-size: 80%"}
+I make explicit my assumptions regarding missing data, by exploring different scenarios.
+
+``` r
+library(missmeta)
+library(tmvtnorm)
+library(mvtnorm)
+
+unif1 <- function(n) runif(n, min = -11, max = 11)
+unif2 <- function(n) runif(n, min = -11, max = 11)
+
+norm01 <- function(n) rnorm(n, mean = 0, sd = 6)
+norm02 <- function(n) rnorm(n, mean = 0, sd = 6)
+
+norm61 <- function(n) rnorm(n, mean = 6, sd = 6)
+norm62 <- function(n) rnorm(n, mean = 6, sd = 6)
+
+normn61 <- function(n) rnorm(n, mean = -6, sd = 6)
+normn62 <- function(n) rnorm(n, mean = -6, sd = 6)
+
+sigma <- matrix(c(6^2,
+                 CorCov(6,6,0.7), 
+                 CorCov(6,6,0.7), 
+                 6^2), nrow = 2)
+
+lower <- c(-100, -100)
+upper <- c(100, 100)
+
+mtv1 <- function(n) rtmvnorm(n, mean = c(-6, -6), sigma = sigma, lower = lower, upper = upper)[,1]
+mtv2 <- function(n) rtmvnorm(n, mean = c(-6, -6), sigma = sigma, lower = lower, upper = upper)[,2]
+```
+:::
+
+```{r, message = FALSE}
+library(missmeta)
+library(tmvtnorm)
+library(mvtnorm)
+
+unif1 <- function(n) runif(n, min = -11, max = 11)
+unif2 <- function(n) runif(n, min = -11, max = 11)
+
+norm01 <- function(n) rnorm(n, mean = 0, sd = 6)
+norm02 <- function(n) rnorm(n, mean = 0, sd = 6)
+
+norm61 <- function(n) rnorm(n, mean = 6, sd = 6)
+norm62 <- function(n) rnorm(n, mean = 6, sd = 6)
+
+normn61 <- function(n) rnorm(n, mean = -6, sd = 6)
+normn62 <- function(n) rnorm(n, mean = -6, sd = 6)
+
+sigma <- matrix(c(6^2,
+             CorCov(6,6,0.7), 
+             CorCov(6,6,0.7), 
+                 6^2), nrow = 2)
+
+lower <- c(-100, -100)
+upper <- c(100, 100)
+
+mtv1 <- function(n) rtmvnorm(n, mean = c(-6, -6), sigma = sigma, lower = lower, upper = upper)[,1]
+mtv2 <- function(n) rtmvnorm(n, mean = c(-6, -6), sigma = sigma, lower = lower, upper = upper)[,2]
+
+```
+
+------------------------------------------------------------------------
+
+#### Impute under different scenarios
+
+::: {style="font-size: 80%"}
+Using the function `genimp` we generate 500 imputed values from each distribution.
+
+``` r
+imp1 <- list(unif1, norm01, norm61, normn61, mtv1)
+imp2 <- list(unif2, norm02, norm62, normn62, mtv2)
+
+out <- mapply(function(i1, i2) {
+  genimp(
+    df = dmnar,
+    iter = 500,
+    imp1 = i1,
+    imp2 = i2,
+    eff1 = "EstCR",
+    eff2 = "EstSR",
+    se1 = "SECR",
+    se2 = "SESR",
+    cor = "Cor.ws",
+    N = "N",
+    imprho = 0.6
+  )
+}, i1 = imp1, i2 = imp2, SIMPLIFY = FALSE)
+```
+:::
+
+```{r}
+imp1 <- list(unif1, norm01, norm61, normn61, mtv1)
+imp2 <- list(unif2, norm02, norm62, normn62, mtv2)
+
+out <- mapply(function(i1, i2) {
+  genimp(
+    df = dmnar,
+    iter = 100,
+    imp1 = i1,
+    imp2 = i2,
+    eff1 = "EstCR",
+    eff2 = "EstSR",
+    se1 = "SECR",
+    se2 = "SESR",
+    cor = "Cor.ws",
+    N = "N",
+    imprho = 0.6
+  )
+}, i1 = imp1, i2 = imp2, SIMPLIFY = FALSE)
+```
+
+------------------------------------------------------------------------
+
+#### Compute meta-analysis for each imputed dataset
+
+::: {style="font-size: 80%"}
+Afterwards, we perform the chosen analyses on each imputed dataset. The user can autonomously choose the preferred meta-analysis package to conduct multivariate meta-analysis (e.g., `metaSEM`, `mixmeta`, `metafor`).
+
+``` r
+library(mixmeta)
+
+outls = unlist(out, recursive = FALSE)
+
+res = lapply(outls, function(data) {
+  theta = cbind(data$EstCR, data$EstSR)
+  Sigma = cbind(data$SECR^2, CorCov(data$SECR, data$SESR, data$Cor.ws), data$SESR^2)
+  
+  m = mixmeta(theta, S = Sigma, method = "ml")
+  s = summary(m)
+  ci = confint(m)
+  
+  results = data.frame(
+  eff1 = s$coefficients[1,1],
+  eff2 = s$coefficients[2,1],
+  se1 = s$coefficients[1, 2],
+  se2 = s$coefficients[2, 2],
+  cov12 = s$vcov[1, 2],
+  ci.lb1 = ci[1, 1], ci.ub1 = ci[1, 2],
+  ci.lb2 = ci[2, 1], ci.ub2 = ci[2, 2]
+  )
+  
+})
+
+res <- do.call(rbind, res)
+
+res <- split(res,  rep(1:5, each=500))
+```
+:::
+
+```{r makemeta}
+library(mixmeta)
+
+outls = unlist(out, recursive = FALSE)
+
+res = lapply(outls, function(data) {
+  theta = cbind(data$EstCR, data$EstSR)
+  Sigma = cbind(data$SECR^2, CorCov(data$SECR, data$SESR, data$Cor.ws), data$SESR^2)
+  
+  m = mixmeta(theta, S = Sigma, method = "ml")
+  s = summary(m)
+  ci = confint(m)
+  
+  results = data.frame(
+  eff1 = s$coefficients[1,1],
+  eff2 = s$coefficients[2,1],
+  se1 = s$coefficients[1, 2],
+  se2 = s$coefficients[2, 2],
+  cov12 = s$vcov[1, 2],
+  ci.lb1 = ci[1, 1], ci.ub1 = ci[1, 2],
+  ci.lb2 = ci[2, 1], ci.ub2 = ci[2, 2]
+  )
+  
+})
+
+res <- do.call(rbind, res)
+
+res <- split(res,  rep(1:5, each=100))
+```
+
+------------------------------------------------------------------------
+
+#### Summarize results for imputed datasets
+
+::: {style="font-size: 80%"}
+With `makepooldata` we prepare the dataset to make it suitable for pooling estimates and standard errors obtained from the iterations using Rubin's rules.
+
+``` r
+pooldata <- lapply(res, function(x) {
+  makepooldata(data = x, effs = "eff", ses = "se", covs = "cov")
+})
+
+methods <- c("Uniform (-11, 11)", "Normal CR = 0, SR = 0", "Normal CR = 6, SR = 6",
+               "Normal CR = -6, SR = -6", "Multivariate Normal (-6, -6)")
+
+sumres <- mapply(function(p, label) {
+  sumeth_multi(Q_mat = p$Q_mat, U_list = p$U_list, method = label)
+}, p = pooldata, label = methods, SIMPLIFY = FALSE)
+```
+
+```{r sum_meth}
+
+pooldata <- lapply(res, function(x) {
+  makepooldata(data = x, effs = "eff", ses = "se", covs = "cov")
+})
+
+methods <- c("Uniform (-11, 11)", "Normal CR = 0, SR = 0", "Normal CR = 6, SR = 6",
+               "Normal CR = -6, SR = -6", "Multivariate Normal (-6, -6)")
+
+sumres <- mapply(function(p, label) {
+  sumeth_multi(Q_mat = p$Q_mat, U_list = p$U_list, method = label)
+}, p = pooldata, label = methods, SIMPLIFY = FALSE)
+
+```
+:::
+
+------------------------------------------------------------------------
+
+#### Plot the results
+
+```{r plot.res, echo = FALSE}
+library(ggplot2)
+library(patchwork)
+
+df_all <- do.call(rbind, sumres)
+
+df_hrsd <- df_all %>% filter(outcome == "eff2")
+p_hrsd <- ggplot(df_hrsd, aes(x = method)) +
+  geom_linerange(aes(ymin = ci_lb, ymax = ci_ub), linewidth = 1.5) +
+  geom_point(aes(y = estimate), color = "black", size = 3) +
+  geom_hline(yintercept = -6.0604, linetype = "dashed", color = "#A4031F") +
+  coord_flip() +
+  labs(
+    title = "Uncertainty Intervals for HRSD",
+    x = "Imputation Distribution", y = "Treatment Effect (HRSD)"
+  ) +
+  theme_minimal()
+
+df_bdi <- df_all %>% filter(outcome == "eff1")
+p_bdi <- ggplot(df_bdi, aes(x = method)) +
+  geom_linerange(aes(ymin = ci_lb, ymax = ci_ub), linewidth = 1.5) +
+  geom_point(aes(y = estimate), color = "black", size = 3) +
+  geom_hline(yintercept = -6.4751, linetype = "dashed", color = "#A4031F") +
+  coord_flip() +
+  labs(
+    title = "Uncertainty Intervals for BDI",
+    x = "Imputation Distribution", y = "Treatment Effect (BDI)"
+  ) +
+  theme_minimal()
+
+# Display them side-by-side
+p_hrsd + p_bdi
+
+```
+
+------------------------------------------------------------------------
+
+## Conclusions
+
+Via a simulation study and a real dataset we have shown the use of a flexible tool for imputing missing outcome data that:
+
+-   Forces the researcher to make explicit the assumptions on the missing outcome data
+
+-   Allows for imputation and robustness check of results under different scenarios
+
+-   Can handle MNAR data
+
+-   Is easy use and with `missmeta` quite forward to implement
+
+------------------------------------------------------------------------
+
+### Limitations
+
+-   Results depend on the imputation distributions and parameters
+
+-   Performance can drop if assumptions are far from reality (SR)
+
+-   Slow at the moment if one has to test many assumptions
+
+------------------------------------------------------------------------
+
+### Future work
+
+-   Increse computational efficiency
+
+-   Extend to mor than two outcomes in multivariate meta-analysis
+
+-   Explore proformance against existing imputation methods and sensitivity analysis techniques
+
+------------------------------------------------------------------------
+
+## References
